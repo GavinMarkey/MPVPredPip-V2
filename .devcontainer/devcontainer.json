@@ -20,7 +20,7 @@
         "tamasfe.even-better-toml"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/opt/conda/envs/vaxpipe-core/bin/python",
+        "python.defaultInterpreterPath": "/opt/conda/envs/mpvpredpip-v2/bin/python",
         "python.terminal.activateEnvironment": false,
         "python.testing.pytestEnabled": true,
         "python.testing.pytestArgs": ["tests"],

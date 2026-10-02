@@ -1,6 +1,6 @@
 # Orchestration and the vaxpipe helper library.
 # Used by every rule that only moves, parses or summarises data.
-name: vaxpipe-core
+name: mpvpredpip-v2
 channels:
   - conda-forge
   - bioconda

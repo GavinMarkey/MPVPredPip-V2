@@ -71,22 +71,22 @@ RUN conda env create -f /tmp/core.yaml \
 # Development extras. Kept out of core.yaml because that file also describes the
 # environment a bare conda install uses to *run* the pipeline, where pytest and
 # ruff are not wanted.
-RUN conda run -n vaxpipe-core python -m pip install --no-cache-dir \
+RUN conda run -n mpvpredpip-v2 python -m pip install --no-cache-dir \
         "pytest>=7.4" \
         "ruff>=0.4"
 
-# Activate vaxpipe-core for every interactive shell and for `docker exec`.
+# Activate mpvpredpip-v2 for every interactive shell and for `docker exec`.
 RUN conda init bash \
-    && echo "conda activate vaxpipe-core" >> /home/${USERNAME}/.bashrc
-ENV PATH=/opt/conda/envs/vaxpipe-core/bin:${PATH} \
-    CONDA_DEFAULT_ENV=vaxpipe-core
+    && echo "conda activate mpvpredpip-v2" >> /home/${USERNAME}/.bashrc
+ENV PATH=/opt/conda/envs/mpvpredpip-v2/bin:${PATH} \
+    CONDA_DEFAULT_ENV=mpvpredpip-v2
 # Expose the interpreter at a conventional location as well. VS Code's Python
 # extension does not reliably discover environments under /opt/conda/envs, and
 # when it finds nothing it offers to install a *second* Python through uv -
 # which would have none of this project's dependencies.
 USER root
-RUN ln -sf /opt/conda/envs/vaxpipe-core/bin/python /usr/local/bin/python \
-    && ln -sf /opt/conda/envs/vaxpipe-core/bin/python /usr/local/bin/python3
+RUN ln -sf /opt/conda/envs/mpvpredpip-v2/bin/python /usr/local/bin/python \
+    && ln -sf /opt/conda/envs/mpvpredpip-v2/bin/python /usr/local/bin/python3
 USER ${USERNAME}
 
 WORKDIR /workspaces/MPVPredPip
