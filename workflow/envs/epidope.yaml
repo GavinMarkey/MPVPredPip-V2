@@ -1,0 +1,15 @@
+# Superseded by epidope.yml (note the extension) - the EpiDope project's own
+# exported environment, taken from its repository. Nothing references this file.
+#
+# The original version of this file declared `epidope` as a plain conda
+# dependency of conda-forge/bioconda. That was wrong: the package is published to
+# the `flomock` channel, and the project distributes a fully pinned export rather
+# than a loose dependency list. Using their file verbatim is the only way the
+# pinned stack (TensorFlow 1.13.1, Keras 2.3.1, PyTorch 0.4.1, CUDA 9.0) resolves
+# as its authors tested it.
+#
+# That environment pins Python 3.6, which cannot parse this codebase, so the
+# workflow never runs vaxpipe code inside it - see the epidope_run and
+# epidope_epitopes rules in workflow/rules/03_bcell.smk.
+#
+# Safe to delete once you are happy with that arrangement.

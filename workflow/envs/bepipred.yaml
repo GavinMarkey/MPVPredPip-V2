@@ -1,0 +1,48 @@
+# BepiPred-3.0.
+#
+# BepiPred-3.0 runs an ESM-2 protein language model, so this environment carries
+# PyTorch and fair-esm. It is deliberately separate from the EpiDope environment:
+# the two pin incompatible deep-learning stacks, which is precisely why the
+# pipeline resolves environments per rule rather than per run.
+#
+# The BepiPred distribution itself is NOT installed here - it is a source tree
+# that carries its own trained weights, fetched by  bash setup/install_bepipred.sh
+# into tools/bepipred3. This environment only provides what that source needs to
+# import and run. Its imports are: numpy, torch, esm, plotly, pandas.
+#
+# Versions differ from the upstream requirements.txt on purpose:
+#
+#   - upstream pins numpy==1.22, pandas==1.4.3, plotly==5.8.0. Those exact
+#     patch versions have no conda-forge builds for every platform and are not
+#     load-bearing: unlike IApred, whose scikit-learn version had to match the
+#     one its .joblib models were trained with, BepiPred's weights are torch
+#     state_dicts, which are version-portable. The major versions are held
+#     because the code is written for numpy 1.x and pandas 1.x.
+#
+#   - upstream does not pin torch at all; its README installs it separately.
+#     "pytorch-cpu" is used rather than "pytorch" so conda does not pull a
+#     multi-gigabyte CUDA stack onto a machine that will not use it. Checked
+#     against torch >= 2.6, which changed torch.load to weights_only=True by
+#     default: BepiPred only loads state_dicts and saved tensors, both of which
+#     that mode allows, so a recent torch is safe.
+#
+#   - fair-esm is pinned to upstream's 1.0.3. Confirmed that this version does
+#     provide esm.pretrained.esm2_t33_650M_UR50D, which is the entry point
+#     BepiPred calls - ESM-2 predates the 2.0.0 release despite the name.
+#
+# First run downloads the ESM-2 weights (~2.5 GB) into the torch hub cache. In
+# the dev container TORCH_HOME points at a named volume so that survives a
+# rebuild; see .devcontainer/docker-compose.yml.
+name: vaxpipe-bepipred
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch-cpu>=2.2,<3
+  - numpy>=1.22,<2
+  - pandas>=1.4,<2
+  - plotly>=5.8
+  - pip:
+      - fair-esm==1.0.3

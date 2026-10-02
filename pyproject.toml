@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vaxpipe"
+version = "1.0.0"
+description = "Linear peptide-based vaccine candidate prediction pipeline"
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# The core library is deliberately dependency-free so it can be imported from
+# the pinned legacy environments the predictors require. These extras are only
+# needed for the orchestrator and the test suite.
+workflow = ["snakemake>=7.32", "pandas>=2.0", "biopython>=1.81", "openpyxl>=3.1"]
+dev = ["pytest>=7.4", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "workflow/scripts"]
+
+# Third-party and historical code that this project does not maintain. The
+# SARS-CoV-2 directory is the previous manual analysis, kept verbatim as the
+# record of what the pipeline replaces - it contains vendored HADDOCK tools and
+# Python 2 scripts that will never be corrected. tools/ holds the licence-gated
+# predictors, which are downloaded rather than committed.
+extend-exclude = [
+    "SARS-COV-2 Peptide Based Vaccine Design",
+    "tools",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # long lines are usually documentation tables
+    "F821",  # the `snakemake` global is injected into workflow scripts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"workflow/scripts/*" = ["E402"]  # sys.path bootstrap must precede imports

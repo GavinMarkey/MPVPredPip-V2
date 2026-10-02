@@ -1,0 +1,154 @@
+# ============================================================================
+# Linear peptide-based vaccine candidate prediction pipeline
+# ============================================================================
+# Run from the project root:
+#     snakemake --use-conda --cores 8
+#
+# Every stage writes into its numbered folder, and the output of each stage is
+# the documented input of the next, so any stage can be inspected, re-run or
+# replaced without touching the others:
+#
+#   0  Input                       YOUR sequences - nothing here is ever written
+#                                  by the pipeline (python setup/init_input.py)
+#   1  Sequence retrieval          manifest + normalised per-protein FASTA
+#   2  Antigenicity (whole protein) informational screen
+#   3  B-cell epitopes             BepiPred + EpiDope
+#   4  T-cell epitopes             MHC-I + MHC-II, class I immunogenicity filter
+#   5  Clustering                  IEDB cluster + B/T composition rule
+#   6  Antigenicity/allergenicity/autoimmunity screening of consensus peptides
+#   7  Conservation                conservancy across strains + MSA
+#   8  Population coverage         IEDB population coverage
+#   9  Final candidates            everything that passed every screen
+#
+# Protein labels are discovered from the input FASTA filenames and deflines, so
+# adding a new protein or strain means dropping a file into stage 1 - no edits
+# to this workflow are needed.
+# ============================================================================
+
+import os
+import sys
+
+from snakemake.utils import min_version
+
+min_version("7.0")
+
+
+configfile: "config.yaml"
+
+
+# --- make the vaxpipe package importable from every script -------------------
+WORKFLOW_DIR = os.path.dirname(os.path.abspath(workflow.snakefile))
+PROJECT_ROOT = os.path.dirname(WORKFLOW_DIR)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
+
+from vaxpipe import fasta as _fasta          # noqa: E402
+from vaxpipe import inputs as _inputs        # noqa: E402
+from vaxpipe import manifest as _manifest    # noqa: E402
+
+
+# --- stage folders -----------------------------------------------------------
+S1 = "1 - Sequence_retrieval"
+S2 = "2 - Antigenicity_prediction"
+S3 = "3 - B-cell_prediction"
+S4 = "4 - T-cell_epitopes"
+S5 = "5 - B_T-cell_consensus"
+S6 = "6 - Antigenicity_Allergenicity_AA_Checks"
+S7 = "7 - Conservation_Analysis"
+S8 = "8 - Population_coverage"
+S9 = "9 - Final_Consensus_Epitopes"
+
+INPUT_DIR = config["sequences"]["input_dir"]
+NORMALISED = f"{S1}/normalised"
+
+
+# --- discover proteins from the user's input files ---------------------------
+# The inputs are static files supplied before the run, so they can be scanned at
+# DAG-construction time. This keeps the workflow free of checkpoints while still
+# fanning out over whatever proteins happen to be present.
+def discover_proteins():
+    aliases = config["sequences"].get("protein_aliases", {})
+    extensions = config["sequences"]["extensions"]
+    labels = set()
+
+    if not os.path.isdir(INPUT_DIR):
+        raise WorkflowError(
+            f"Input directory not found: {INPUT_DIR!r}\n"
+            "Create it with  python setup/init_input.py\n\n"
+            + _inputs.short_rules(INPUT_DIR, extensions)
+        )
+
+    for path in _inputs.find_inputs(INPUT_DIR, extensions):
+        for record in _fasta.read_fasta(path):
+            labels.add(_fasta.normalise_protein_label(record.name, aliases))
+
+    if not labels:
+        raise WorkflowError(
+            f"No protein FASTA files found in {INPUT_DIR!r}.\n\n"
+            + _inputs.short_rules(INPUT_DIR, extensions)
+        )
+    return sorted(labels)
+
+
+PROTEINS = discover_proteins()
+
+
+wildcard_constraints:
+    protein="[A-Za-z0-9_.-]+",
+
+
+# --- target ------------------------------------------------------------------
+rule all:
+    input:
+        f"{S1}/manifest.tsv",
+        f"{S2}/whole_protein_antigenicity.tsv",
+        expand(f"{S5}/{{protein}}/clusters.tsv", protein=PROTEINS),
+        expand(f"{S6}/{{protein}}/screening.tsv", protein=PROTEINS),
+        expand(f"{S7}/{{protein}}/conservancy.tsv", protein=PROTEINS),
+        expand(f"{S8}/{{protein}}/population_coverage.tsv", protein=PROTEINS),
+        f"{S9}/final_candidates.tsv",
+        f"{S9}/final_candidates.fasta",
+        f"{S9}/PIPELINE_REPORT.md",
+
+
+include: "rules/01_sequences.smk"
+include: "rules/02_antigenicity.smk"
+include: "rules/03_bcell.smk"
+include: "rules/04_tcell.smk"
+include: "rules/05_cluster.smk"
+include: "rules/06_screening.smk"
+include: "rules/07_conservation.smk"
+include: "rules/08_population.smk"
+include: "rules/09_final.smk"
+
+
+onsuccess:
+    # This fires for ANY successful run, including one asked for a single
+    # intermediate file. Naming the final outputs unconditionally claimed they
+    # existed after runs that had not gone near stage 9, which is worse than
+    # saying nothing - so say what is actually on disk.
+    _final = os.path.join(S9, "final_candidates.tsv")
+    _report = os.path.join(S9, "PIPELINE_REPORT.md")
+    if os.path.exists(_final):
+        print(
+            "\n" + "=" * 78 +
+            f"\nPipeline complete. Final candidates: {_final}"
+            f"\nSummary report:                     {_report}\n" +
+            "=" * 78
+        )
+    else:
+        print(
+            "\n" + "=" * 78 +
+            "\nRequested targets are up to date. This was not a full run:"
+            f"\n{_final} does not exist yet.\n" +
+            "=" * 78
+        )
+
+
+onerror:
+    print(
+        "\n" + "=" * 78 +
+        "\nPipeline failed. Each stage keeps the raw output of the tool that ran,"
+        "\nso the failing stage's folder shows exactly what the predictor produced."
+        "\nRe-run with --rerun-incomplete after fixing the cause.\n" +
+        "=" * 78
+    )

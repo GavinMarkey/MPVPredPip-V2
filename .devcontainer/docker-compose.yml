@@ -1,0 +1,58 @@
+# Dev container composition.
+#
+# One service. The point of using compose rather than a bare image is the two
+# named volumes: the per-rule conda environments and the conda package cache are
+# slow to build and must survive an image rebuild.
+
+name: mpvpredpip_devcontainer
+
+services:
+  vaxpipe:
+    build:
+      # The build context is the project root, not .devcontainer/, so the
+      # Dockerfile can COPY workflow/envs/core.yaml.
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        USERNAME: vscode
+        USER_UID: "1000"
+        USER_GID: "1000"
+
+    volumes:
+      # The project itself. Edits on the host and in the container are the same
+      # files; every stage writes its outputs into its numbered folder here.
+      - ..:/workspaces/MPVPredPip:cached
+
+      # Snakemake's per-rule conda environments - several GB, slow to resolve.
+      # Kept outside the workspace: a volume mounted at .snakemake/conda would
+      # make Docker create .snakemake/ in the bind mount as root, and Snakemake
+      # could then not create shadow/ and log/ beside it. SNAKEMAKE_CONDA_PREFIX
+      # below points Snakemake here instead.
+      - snakemake-conda:/opt/snakemake-conda
+
+      # Package cache shared across those environment builds.
+      - conda-pkgs:/opt/conda/pkgs
+
+    # Keep the container alive; VS Code attaches and opens its own shells.
+    command: sleep infinity
+
+    # Reap the zombie processes some predictors leave behind.
+    init: true
+
+    # The deep-learning predictors (BepiPred's ESM-2, EpiDope's TensorFlow) use
+    # more shared memory than Docker's 64 MB default.
+    shm_size: "2gb"
+
+    environment:
+      # Equivalent to passing --conda-prefix on every invocation, so a plain
+      # `snakemake --use-conda --cores 8` uses the cache volume above.
+      SNAKEMAKE_CONDA_PREFIX: /opt/snakemake-conda
+
+      # Snakemake is the only thing that should be creating conda environments;
+      # keep its resolver quiet and deterministic.
+      CONDA_ALWAYS_YES: "true"
+      PYTHONPATH: /workspaces/MPVPredPip/src
+
+volumes:
+  snakemake-conda:
+  conda-pkgs:

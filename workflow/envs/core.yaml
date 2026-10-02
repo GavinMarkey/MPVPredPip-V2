@@ -1,0 +1,16 @@
+# Orchestration and the vaxpipe helper library.
+# Used by every rule that only moves, parses or summarises data.
+name: vaxpipe-core
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - snakemake-minimal>=7.32
+  - pyyaml>=6.0
+  - pandas>=2.0
+  - numpy>=1.24
+  - biopython>=1.81
+  - openpyxl>=3.1        # writing .xlsx summaries alongside the TSVs
+  - tabulate>=0.9

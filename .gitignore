@@ -1,0 +1,45 @@
+# Snakemake
+.snakemake/
+*.snakemake.log
+
+# Licence-gated predictors and large downloads - never commit these
+tools/*/
+!tools/README.md
+resources/human/*.fasta
+
+# Your input sequences in "0 - Input" ARE tracked (with its README.txt, which
+# also keeps the otherwise-empty folder in the repository). Everything from
+# stage 1 onward is derived - the pipeline regenerates it and it is large - so
+# it is not. "1 - Sequence_retrieval" is generated in full, which is why it is
+# ignored whole and safe to delete.
+1 - Sequence_retrieval/
+2 - Antigenicity_prediction/raw/
+3 - B-cell_prediction/*/
+4 - T-cell_epitopes/*/
+5 - B_T-cell_consensus/*/
+6 - Antigenicity_Allergenicity_AA_Checks/*/
+7 - Conservation_Analysis/*/
+8 - Population_coverage/*/
+9 - Final_Consensus_Epitopes/*
+
+# ...but keep the reports and final candidate lists, which are the deliverables.
+!9 - Final_Consensus_Epitopes/final_candidates.tsv
+!9 - Final_Consensus_Epitopes/final_candidates.fasta
+!9 - Final_Consensus_Epitopes/PIPELINE_REPORT.md
+!9 - Final_Consensus_Epitopes/attrition.tsv
+!**/summary.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Editors / OS
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db

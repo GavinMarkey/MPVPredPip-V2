@@ -1,0 +1,48 @@
+# IEDB standalone tools: MHC-I and MHC-II binding, immunogenicity, epitope
+# clustering and population coverage.
+#
+# The IEDB standalones are conservative about their interpreter: several ship
+# vendored dependencies that assume an older Python and NumPy. Pinning here keeps
+# them working without disturbing the rest of the pipeline.
+#
+# The tools themselves are downloaded separately - see tools/README.md.
+name: vaxpipe-iedb
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  # 3.9 is a hard floor, not a preference. mhc_i's bundled
+  # netmhcpan-4.1-executable - which is what the netmhcpan_el method in
+  # config.yaml runs - does `from importlib.resources import files`, and
+  # importlib.resources.files() only exists from 3.9. Under 3.8 it fails at
+  # import, and because the tool prints that failure to stdout and exits 0, the
+  # whole of stage 4 completes reporting zero class I binders. See
+  # _check_binding_output in src/vaxpipe/adapters/iedb.py.
+  #
+  # Deliberately 3.9 and not something newer: mhc_ii is known to work on 3.8, so
+  # this is the smallest step that fixes class I without disturbing class II.
+  # The tools' READMEs claim 3.6+, which is wrong for this release of mhc_i.
+  - python=3.9
+  - numpy>=1.20,<1.25
+  - pandas>=1.3,<2.0
+  - scipy>=1.7
+  - scikit-learn>=1.0
+  - biopython>=1.79
+  - pyyaml
+  - tcsh            # some IEDB predictor wrappers shell out to tcsh
+  - gawk
+  # setuptools, for pkg_resources. Not optional and not obvious: both binding
+  # predictors vendor their percentile-rank data as small packages that do
+  #     from pkg_resources import resource_filename
+  # to find their own data files - including
+  # mhci-netmhcpan-4.1-el-percentile-data, which is exactly what the
+  # netmhcpan_el method configured in config.yaml uses. pkg_resources ships with
+  # setuptools, which recent Python no longer bundles and which nothing else
+  # here pulls in.
+  #
+  # Without it every prediction fails with ModuleNotFoundError: No module named
+  # 'pkg_resources'. That is how mhc_ii's own test suite fails during
+  # `python configure.py`, so run that after building this environment if you
+  # want the tools to self-check.
+  - setuptools

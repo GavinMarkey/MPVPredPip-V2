@@ -1,0 +1,351 @@
+# ============================================================================
+# Ebola linear peptide vaccine-candidate pipeline - master configuration
+# ============================================================================
+# Every tunable parameter in the pipeline lives here. The Snakemake workflow
+# and all helper scripts read from this file; nothing is hard-coded in code.
+# ----------------------------------------------------------------------------
+
+project:
+  name: "MPVPredPip"
+  # Root of the numbered stage folders. Relative to this file.
+  root: "."
+
+# ----------------------------------------------------------------------------
+# STAGE 0/1 - Your input sequences
+# ----------------------------------------------------------------------------
+# Your FASTA files live in "0 - Input/", which is YOURS: nothing in the pipeline
+# writes there. Stage 1 reads it and writes its own outputs to
+# "1 - Sequence_retrieval/", which is entirely generated and safe to delete.
+#
+# That separation is deliberate. This used to point at the stage 1 folder, so
+# clearing stage 1 to force a re-run also deleted the source sequences.
+#
+# Protein, strain and accession are parsed from the NCBI HEADER LINE:
+#     >ACCESSION protein name [strain name]
+# The FILENAME is only a fallback, used when the header lacks a protein name or
+# a [strain], and it must look like "ACCESSION protein name - strain.fasta" with
+# a space on both sides of the dash. Run  python setup/init_input.py  for the
+# full rules; they are also written to "0 - Input/README.txt".
+sequences:
+  input_dir: "0 - Input"
+  extensions: [".fasta", ".fa", ".faa"]
+  # Proteins are grouped by this normalised name; epitope IDs are prefixed with
+  # the short label. Add an entry for every protein you analyse.
+  protein_aliases:
+    "spike glycoprotein": "Spike"
+    "glycoprotein": "Spike"
+    "nucleoprotein": "Nucleoprotein"
+  # Sequences shorter than this are rejected as likely fragments.
+  min_length: 50
+
+# ----------------------------------------------------------------------------
+# STAGE 2 - Whole-protein antigenicity
+# ----------------------------------------------------------------------------
+antigenicity:
+  # "iapred"   - IAPred from https://github.com/sebamiles/IAPred
+  #              install with: bash setup/install_iapred.sh
+  # "external" - any predictor with a CLI; set `command` below
+  # "kolaskar" - built-in propensity fallback, for testing the workflow only
+  tool: "iapred"
+  # Only used when tool is "external". {input} is a FASTA, {output} is a
+  # delimited file with an identifier column and a score column.
+  command: ""
+  # Whole proteins scoring below this are reported but NOT dropped - stage 2 is
+  # informational. The same threshold is re-applied to final consensus peptides
+  # in stage 6, where it IS a hard filter.
+  #
+  # 0.3 is IApred's own "High antigenicity" boundary (tools/iapred/README.md).
+  # Its scores run roughly -3 to 3, so this is NOT a 0-1 probability and negative
+  # values are normal. If you switch `tool` above, re-set this: the "kolaskar"
+  # fallback scores around 1.0 and would pass everything at 0.3.
+  threshold: 0.3
+  # Set true to stop the pipeline for proteins that fail at stage 2.
+  drop_failing_proteins: false
+
+# ----------------------------------------------------------------------------
+# STAGE 3 - B-cell epitope prediction
+# ----------------------------------------------------------------------------
+bcell:
+  tools: ["bepipred", "epidope"]
+
+  # Every B-cell epitope is a fixed-length peptide, because linear B-cell
+  # epitopes are typically 12-16 residues. An above-threshold region longer than
+  # this is not one long epitope - it is a stretch containing several, and the
+  # per-residue score cannot say which offsets are the real ones. So each region
+  # is tiled with overlapping peptides of `epitope_length`, advancing
+  # `epitope_step` residues at a time, and stage 5's clustering collapses the
+  # overlaps. A region shorter than `epitope_length` yields nothing.
+  #
+  #   PHDWTKNITDKIDQIIHDFIDK...  ->  PHDWTKNITDKIDQ   (1-14)
+  #                                    DWTKNITDKIDQII (3-16)
+  #                                      TKNITDKIDQIIHD (5-18)  ...
+  #
+  # A region SHORTER than epitope_length is padded out to it with the flanking
+  # residues, centred on the region. Those flanks are real sequence that scores
+  # below the threshold, and a short predicted core is still evidence: the
+  # Ebola nucleoprotein's EpiDope regions are all around 10 residues, so
+  # discarding them would drop the whole protein out of the analysis at stage 5.
+  # Regions shorter than min_region_length are dropped as too small to be
+  # credible.
+  bepipred:
+    # BepiPred-3.0 emits a per-residue probability. Residues at or above this
+    # score form the regions that are then tiled. The pipeline reads the raw
+    # per-residue score from raw_output.csv, not the rolling-mean "linear epitope
+    # score" column beside it, because this is the value BepiPred's own -t is
+    # compared against - so this threshold means exactly what -t means there.
+    threshold: 0.1512         # BepiPred-3.0 author default
+    epitope_length: 14
+    epitope_step: 2
+    min_region_length: 6
+    # Merge two regions separated by fewer than this many sub-threshold residues
+    merge_gap: 1
+    # Where BepiPred caches its ESM-2 encodings. "~" is expanded.
+    #
+    # This MUST NOT be inside the project directory on Windows. BepiPred names
+    # each encoding after the sequence's defline, and ours contain "|", which is
+    # a legal filename character on Linux but illegal on Windows - so writing
+    # them to the bind-mounted workspace fails. It is also genuinely a cache:
+    # encoding is the slow part of a run and depends only on the input
+    # sequences, so it is kept out of the stage folder and off the re-run path.
+    #
+    # The home directory rather than somewhere under /opt: /opt is root-owned in
+    # the dev container, and the pipeline runs as an unprivileged user. Anywhere
+    # outside the workspace that the run user owns will do.
+    esm_cache_dir: "~/.cache/bepipred/esm_encodings"
+
+  epidope:
+    # Lowered from EpiDope's author default of 0.818 on 2026-09-30.
+    #
+    # At 0.818 EpiDope flagged so few regions that its 45 Spike epitopes landed
+    # in 6 of 330 clusters, and 324 clusters (98%) were rejected for having no
+    # EpiDope epitope at all - by a wide margin the binding constraint on the
+    # whole pipeline, since stage 5 requires one from each B-cell predictor.
+    # BepiPred, at its own default, contributed 218.
+    #
+    # 0.7 is a deliberate relaxation, not a corrected value: it buys more
+    # clusters that can satisfy the composition rule, at the cost of weaker
+    # evidence per B-cell epitope. Raise it back to 0.818 to reproduce the
+    # author-default behaviour, and expect near-zero candidates.
+    threshold: 0.7
+    epitope_length: 14
+    epitope_step: 2
+    min_region_length: 6
+    merge_gap: 1
+    # EpiDope's own sliced-epitope output (predicted_epitopes_sliced.faa). The
+    # pipeline does NOT consume that file - its epitopes come from the
+    # per-residue scores, tiled as above, so that BepiPred and EpiDope epitopes
+    # are built identically. These mirror the tiling so the preserved raw output
+    # agrees with the analysis. EpiDope's own defaults are 15 and 5.
+    slice_length: 14
+    slice_shift: 2
+
+# ----------------------------------------------------------------------------
+# STAGE 4 - T-cell epitope prediction (Tepitool-equivalent, run locally)
+# ----------------------------------------------------------------------------
+# Tepitool is a guided web wrapper around the IEDB MHC binding predictors. We
+# reproduce it locally by calling the IEDB standalone predictors with Tepitool's
+# recommended allele panel and percentile cut-offs.
+tcell:
+  mhc_i:
+    method: "netmhcpan_el"    # IEDB standalone method name
+    peptide_lengths: [9]
+    percentile_cutoff: 1.0    # keep binders with percentile rank <= this
+    allele_file: "workflow/config/alleles/mhc_i_alleles.txt"
+
+  mhc_ii:
+    method: "netmhciipan_el"
+    peptide_lengths: [15]
+    percentile_cutoff: 10.0
+    allele_file: "workflow/config/alleles/mhc_ii_alleles.txt"
+
+  # MHC class I binders are additionally screened with the IEDB immunogenicity
+  # predictor; only peptides with a score above this are carried forward.
+  immunogenicity:
+    enabled: true
+    min_score: 0.0            # "positive immunogenicity"
+
+# ----------------------------------------------------------------------------
+# STAGE 5 - Epitope clustering and B/T consensus selection
+# ----------------------------------------------------------------------------
+clustering:
+  # Sequence-identity threshold as a PERCENTAGE, 0-100.
+  #
+  # This was 0.6, documented as a fraction, because the pipeline was written
+  # against the IEDB *web* cluster tool. Clustering is now done in-process by
+  # vaxpipe.cluster, which reimplements the IEDB *standalone*'s identity rule,
+  # and that rule's scale is 0-100 with a default of 80. Stage 5 refuses a value
+  # at or below 1 rather than cluster every epitope in the run together.
+  #
+  # Identity here is not a conventional alignment score: the shorter peptide is
+  # slid along the longer with no gaps, the best offset wins, and the match count
+  # is divided by the LONGER length - except that an exact substring scores 99.9.
+  # Raising this makes clusters tighter and their consensus more likely to be a
+  # real peptide; see reject_ambiguous_consensus below.
+  threshold: 60
+  # Collapse identical peptides before clustering (the tool's --unique=on).
+  unique: true
+  # `method` used to be here, set to "cluster-break". That is a web-tool option;
+  # the standalone has no method setting at all, so it has been removed.
+
+  # Rules a cluster must satisfy to be carried forward. This implements
+  # "at least 1 MHC class I and class II epitope alongside 1 B-cell epitope
+  #  from BepiPred and EpiDope".
+  require:
+    min_mhc_i: 1
+    min_mhc_ii: 1
+    min_bepipred: 1
+    min_epidope: 1
+  # If false, a cluster passes with a B-cell epitope from EITHER B-cell tool
+  # (min_bepipred + min_epidope are then summed into a single requirement).
+  require_both_bcell_tools: true
+
+  # Consensus sequences containing an ambiguous residue are discarded (this
+  # reproduces the "'X' not in alignment column" check of the previous pipeline).
+  reject_ambiguous_consensus: true
+
+# ----------------------------------------------------------------------------
+# STAGE 6 - Antigenicity / allergenicity / autoimmunity screening of consensus
+# ----------------------------------------------------------------------------
+screening:
+  antigenicity:
+    enabled: true
+    # Hard filter at this stage, and deliberately NOT the same value as
+    # antigenicity.threshold above. That one screens whole proteins; this one
+    # screens 20-30mer consensus peptides, and IApred's scale behaves
+    # differently on the two.
+    #
+    # Measured on this run: the six input proteins scored -0.07 to 0.93
+    # (median ~0.50), while the nine consensus peptides cut from them scored
+    # -0.77 to 0.81 (median ~-0.13). The Zaire spike glycoprotein scores 0.69
+    # as a protein, yet peptides taken from it score -0.44 and 0.81. Applying
+    # the whole-protein "High" boundary of 0.3 to peptides rejected 8 of 9.
+    #
+    # -0.3 is IApred's own Moderate/Low boundary, not an arbitrary relaxation:
+    # it accepts peptides of Moderate antigenicity or better and rejects only
+    # those the tool calls Low. Raise it to 0.3 to demand High antigenicity and
+    # expect very few candidates to survive.
+    #
+    # IApred also refuses sequences under 20 aa outright, which is a further
+    # sign that short peptides sit at the edge of its intended domain. Treat
+    # these scores as a ranking signal more than a sharp verdict.
+    threshold: -0.3
+  allergenicity:
+    enabled: true
+    tool: "algpred2"
+    # Peptides predicted ALLERGEN are dropped.
+    #
+    # 0.3 is AlgPred's own default and it is designed to accept peptides (its
+    # bundled example is peptide.fa), so unlike the antigenicity cut above this
+    # one is in-domain and stays put.
+    #
+    # Known caveat, measured on this run: MERCI and BLAST both scored 0 for
+    # every peptide, so Hybrid Score == ML Score throughout and the hybrid has
+    # degenerated to composition alone. That is expected at 20-30 aa - BLAST
+    # finds no allergen homologs and the IgE motifs do not hit - but it means
+    # these calls rest on one line of evidence, and all of them landed within
+    # 0.12 of the threshold. Stage 6 records this in its summary; treat an
+    # allergen call here as weak evidence, not a settled verdict.
+    threshold: 0.3
+    # 2 = hybrid (RF + BLAST + MERCI), 1 = amino-acid-composition RF alone.
+    #
+    # AlgPred's own default is 1; this pipeline overrides it to 2 because the
+    # hybrid score is the one its published threshold is characterised against.
+    # The cost is that model 2 needs BLAST, MERCI and the repository's
+    # Database/ directory, so it cannot run from the pip wheel - see
+    # setup/install_algpred.sh and workflow/envs/screening.yaml.
+    model: 2
+  autoimmunity:
+    enabled: true
+    # In-process, not the PIR Peptide Match standalone - see
+    # src/vaxpipe/autoimmunity.py for why, and for the L/I-equivalence caveat
+    # that comes with the choice. Kept as a named field so the record of which
+    # method produced a result stays in the config rather than only in code.
+    tool: "vaxpipe.autoimmunity"
+    # A consensus peptide sharing an exact substring of this length or longer
+    # with the human proteome is flagged as a potential autoimmunity risk.
+    min_exact_match_length: 9
+    # Drop flagged peptides (true) or only annotate them (false).
+    drop_on_match: true
+    human_proteome: "resources/human/UP000005640_9606.fasta"
+
+# ----------------------------------------------------------------------------
+# STAGE 7 - Conservation analysis
+# ----------------------------------------------------------------------------
+conservation:
+  # Redundant (identical) input sequences are collapsed before conservancy
+  # analysis so that percentages are not inflated by duplicate submissions.
+  deduplicate_inputs: true
+
+  conservancy:
+    # "local"  - run the reimplemented IEDB conservancy algorithm offline
+    # "export" - only write upload-ready files for the IEDB web tool
+    # "both"   - do both (recommended: unattended run + web cross-check)
+    mode: "both"
+    # Minimum sequence-identity for an epitope to count as "conserved" in a
+    # given target sequence, as a fraction.
+    identity_threshold: 1.0
+    # Consensus peptides conserved in fewer than this fraction of strains are
+    # reported but not dropped.
+    min_conservancy: 0.0
+
+  msa:
+    aligner: "mafft"
+    args: "--auto --anysymbol"
+
+  consurf:
+    enabled: false            # requires the licence-gated standalone; see tools/README.md
+
+# ----------------------------------------------------------------------------
+# STAGE 8 - Population coverage
+# ----------------------------------------------------------------------------
+population_coverage:
+  # IEDB population coverage standalone.
+  # "I", "II" or "I,II" (combined class I + class II calculation)
+  mhc_class: "I,II"
+  populations:
+    - "World"
+    - "East Africa"
+    - "West Africa"
+    - "Central Africa"
+    - "Europe"
+    - "North America"
+
+# ----------------------------------------------------------------------------
+# STAGE 9 - Final candidate selection
+# ----------------------------------------------------------------------------
+final:
+  # A consensus peptide reaches stage 9 only if it passed every enabled screen
+  # in stage 6 and still satisfies the stage 5 composition rule.
+  require_all_screens: true
+  # Sort the final table by this column, descending.
+  rank_by: "antigenicity_score"
+
+# ----------------------------------------------------------------------------
+# External tool locations
+# ----------------------------------------------------------------------------
+# Paths are relative to the project root unless absolute. Anything under
+# tools/ that is licence-gated must be installed by the user; run
+#   bash setup/fetch_tools.sh
+# to download what is freely available and to print instructions for the rest.
+tools:
+  root: "tools"
+  iedb_mhc_i: "tools/mhc_i"
+  iedb_mhc_ii: "tools/mhc_ii"
+  iedb_immunogenicity: "tools/immunogenicity"
+  iedb_cluster: "tools/cluster"
+  iedb_population_coverage: "tools/population_coverage"
+  bepipred: "tools/bepipred3"
+  epidope: "epidope"                 # on PATH inside its conda env
+  antigenicity: "tools/iapred"
+  algpred: "tools/algpred2"
+  # No peptide_match entry: stage 6's autoimmunity screen is done in-process by
+  # vaxpipe.autoimmunity, not by the PIR standalone. See that module's docstring.
+  consurf: "tools/consurf"
+
+# ----------------------------------------------------------------------------
+# Execution
+# ----------------------------------------------------------------------------
+resources:
+  threads_per_job: 4
+  # Some IEDB predictors are memory hungry; cap concurrent heavy jobs.
+  max_heavy_jobs: 2

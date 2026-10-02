@@ -1,0 +1,44 @@
+# Antigenicity (stages 2 and 6), plus stage 6's screening logic.
+#
+# Two things are deliberately NOT here:
+#
+#   No JRE. Stage 6's autoimmunity screen used to shell out to the PIR Peptide
+#   Match jar; it is now done in-process by vaxpipe.autoimmunity.
+#
+#   No AlgPred. Its rf_model was pickled with scikit-learn 0.22 and cannot be
+#   unpickled under the 1.5.2 pinned below, so it runs in its own rule under
+#   workflow/envs/algpred.yaml. The warning in the scikit-learn comment at the
+#   bottom of this file is what actually happened.
+#
+# Stage 2 uses this environment too, rather than core.yaml, so that IApred's
+# dependencies live in exactly one place instead of being duplicated into the
+# environment nearly every other rule shares.
+name: vaxpipe-screening
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.10
+  - numpy>=1.24
+  - pandas>=2.0
+  - biopython>=1.81
+  - pyyaml
+
+
+  # --- IApred -------------------------------------------------------------
+  # Its requirements.txt is incomplete: imbalanced-learn is commented out, and
+  # matplotlib and seaborn are absent entirely, yet functions.py imports all
+  # three at module scope - so the tool will not start without them. They are
+  # training/plotting dependencies that prediction never uses.
+  - joblib
+  - imbalanced-learn
+  - matplotlib-base
+  - seaborn-base
+
+  # Pinned, not >=1.0. IApred loads pre-trained .joblib models built with
+  # scikit-learn 1.5.2; unpickling estimators across versions can fail, or load
+  # with a warning and give subtly wrong numbers. AlgPred 2.0 also ships
+  # scikit-learn models - if those turn out to need a different version, the two
+  # tools need separate environments rather than a loosened pin here.
+  - scikit-learn=1.5.2

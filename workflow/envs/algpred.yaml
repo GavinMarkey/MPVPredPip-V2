@@ -1,0 +1,42 @@
+# AlgPred 2.0 only.
+#
+# Separate from screening.yaml because the two tools' scikit-learn requirements
+# are mutually exclusive, which screening.yaml's own comment anticipated:
+#
+#   AlgPred's rf_model was pickled with scikit-learn 0.22 or older. Under a
+#   modern release it fails in sklearn.tree._tree with
+#
+#       ValueError: node array from the pickle has an incompatible dtype
+#
+#   because 'missing_go_to_left' was added to the tree node dtype in 1.3.
+#   IApred, meanwhile, needs 1.5.2 for its own models. One environment cannot
+#   satisfy both, so AlgPred gets a rule and an environment of its own - the
+#   same split stage 3 already uses for EpiDope.
+#
+# Nothing of ours enters this environment except vaxpipe.algpred, which is
+# standard-library-only and 3.8-compatible for that reason. Snakemake itself
+# cannot be imported here (its source needs 3.10+), so the rule using this
+# environment must be `shell:`, not `script:`.
+name: vaxpipe-algpred
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  # 0.22 is the last release with sklearn.externals.joblib, which is what
+  # algpred2.py imports - so it is almost certainly what produced rf_model.
+  # Python is pinned to 3.8 because 0.22 predates support for anything later.
+  - python=3.8
+  - scikit-learn=0.22.*
+  - joblib
+  # Held back deliberately. Old scikit-learn will not build against numpy>=1.20,
+  # and pandas 2 raises on `df.sum(axis=1)` over a frame with a string column -
+  # which algpred2.py's hybrid() does when combining the component scores.
+  - numpy<1.20
+  - pandas<1.2
+
+  # --- hybrid model (-m 2) ------------------------------------------------
+  # The ensemble is RF + BLAST + MERCI. MERCI is a Perl program shipped in the
+  # AlgPred repository; BLAST runs against the repository's own Database/.
+  - blast>=2.13
+  - perl>=5.32

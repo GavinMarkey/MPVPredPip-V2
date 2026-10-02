@@ -1,0 +1,43 @@
+{
+  "name": "MPVPredPip - multivalent peptide vaccine prediction pipeline",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "vaxpipe",
+  "workspaceFolder": "/workspaces/MPVPredPip",
+
+  // Install the library in editable mode so `import vaxpipe` works from any
+  // working directory, then report which external predictors resolved. The
+  // check exits 1 when a licence-gated tool is missing, which is the normal
+  // state on a fresh clone - `|| true` keeps that from failing the build.
+  "postCreateCommand": "python -m pip install --no-deps -e . && { [ -f tools/iapred/requirements.txt ] && python -m pip install -r tools/iapred/requirements.txt; }; python setup/check_tools.py || true; python setup/init_input.py || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "snakemake.snakemake-lang",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/envs/vaxpipe-core/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"],
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.watcherExclude": {
+          "**/.snakemake/**": true
+        },
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+
+  "remoteUser": "vscode",
+
+  // Stop the container when the window closes; the named volumes persist, so
+  // the next start does not re-resolve any conda environment.
+  "shutdownAction": "stopCompose"
+}
