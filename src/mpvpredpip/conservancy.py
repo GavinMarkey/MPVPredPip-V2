@@ -1,4 +1,4 @@
-"""Stage 7 - epitope conservancy across the supplied strains.
+﻿"""Stage 7 - epitope conservancy across the supplied strains.
 
 The IEDB conservancy analysis tool is web-only. Its algorithm is simple and fully
 specified, so it is reimplemented here to keep the pipeline unattended, while
@@ -130,7 +130,7 @@ def run(
         targets = deduplicate_records(targets)
         if before != len(targets):
             print(
-                f"[vaxpipe] conservancy: collapsed {before} -> {len(targets)} "
+                f"[mpvpredpip] conservancy: collapsed {before} -> {len(targets)} "
                 f"non-redundant {protein_label} sequences",
             )
 

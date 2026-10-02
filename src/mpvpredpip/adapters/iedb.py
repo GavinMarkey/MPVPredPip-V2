@@ -1,4 +1,4 @@
-"""Adapters for the IEDB standalone tools.
+﻿"""Adapters for the IEDB standalone tools.
 
 Covers stages 4, 5 and 8: MHC class I and class II binding prediction, class I
 immunogenicity, epitope cluster analysis and population coverage.
@@ -344,10 +344,10 @@ def predict_immunogenicity(
 #
 # There was a ``run_cluster`` here. It has been removed rather than corrected,
 # because there is nothing left for it to do: stage 5 clusters in-process with
-# vaxpipe.cluster and never invokes the standalone. Leaving it would have left a
+# mpvpredpip.cluster and never invokes the standalone. Leaving it would have left a
 # function whose command line matched no released version of the tool, which is
 # worse than no function at all - see this module's docstring for what the
-# standalone actually is, and src/vaxpipe/cluster.py for what replaced it.
+# standalone actually is, and src/mpvpredpip/cluster.py for what replaced it.
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +445,7 @@ def parse_population_coverage(path: str) -> list[dict[str, object]]:
         raise base.ToolError(
             f"Could not parse any population rows from {path}.\n"
             "The raw report has been kept - check its layout and adjust "
-            "parse_population_coverage() in src/vaxpipe/adapters/iedb.py."
+            "parse_population_coverage() in src/mpvpredpip/adapters/iedb.py."
         )
     return rows
 

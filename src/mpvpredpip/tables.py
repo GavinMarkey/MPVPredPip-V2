@@ -1,4 +1,4 @@
-"""Tab-separated table I/O against the schemas in :mod:`vaxpipe.schemas`.
+﻿"""Tab-separated table I/O against the schemas in :mod:`mpvpredpip.schemas`.
 
 Dependency-free on purpose: the legacy predictor environments cannot all carry
 pandas, and every stage boundary in this pipeline is a plain TSV so that any

@@ -1,7 +1,7 @@
-"""Canonical table schemas passed between pipeline stages.
+﻿"""Canonical table schemas passed between pipeline stages.
 
 Every stage reads and writes tab-separated files with these exact columns. Tool
-specific formats are converted at the edges (see ``vaxpipe.adapters``) so that
+specific formats are converted at the edges (see ``mpvpredpip.adapters``) so that
 no downstream stage ever has to know which predictor produced a row.
 """
 
@@ -124,7 +124,7 @@ SCREENING = [
     "autoimmune_risk",     # True means it matches the human proteome -> fails
     # Windows that could not be searched because they hold an ambiguous
     # residue. Non-zero means the autoimmunity verdict is incomplete, NOT that
-    # the peptide came back clean - see vaxpipe.autoimmunity.
+    # the peptide came back clean - see mpvpredpip.autoimmunity.
     "windows_skipped",
     "passes",
     "reason",

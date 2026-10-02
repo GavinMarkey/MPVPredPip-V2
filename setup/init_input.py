@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """Create the input folder, explain how to fill it, and check what is in it.
 
     python setup/init_input.py
@@ -10,7 +10,7 @@ It exits 0 when the folder is empty or its files are acceptable, and 1 only when
 files are present that stage 1 would reject - so it doubles as a quick preflight
 before a long run.
 
-The rules themselves live in ``src/vaxpipe/inputs.py`` and are the same text the
+The rules themselves live in `src/mpvpredpip/inputs.py`` and are the same text the
 pipeline prints in its own errors, so there is one place to correct them.
 """
 
@@ -27,7 +27,7 @@ try:
 except ImportError:  # pragma: no cover - the dev container always has it
     sys.exit("PyYAML is required: conda install -c conda-forge pyyaml")
 
-from vaxpipe import inputs  # noqa: E402
+from mpvpredpip import inputs  # noqa: E402
 
 GREEN, RED, YELLOW, DIM, RESET = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 

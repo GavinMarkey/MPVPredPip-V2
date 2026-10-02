@@ -1,4 +1,4 @@
-# Stage 3 - linear B-cell epitope prediction.
+﻿# Stage 3 - linear B-cell epitope prediction.
 #
 # BepiPred and EpiDope each run once per protein (the per-protein FASTA already
 # holds every strain, so one invocation covers them all and keeps per-strain
@@ -10,7 +10,7 @@
 # not per pipeline.
 #
 # Both tools emit per-residue scores. Converting those to epitope intervals is
-# done by the shared code in vaxpipe.epitopes so that BepiPred and EpiDope
+# done by the shared code in mpvpredpip.epitopes so that BepiPred and EpiDope
 # epitopes are built by identical rules and remain comparable in stage 5.
 #
 # Both predictor rules use `shell:` rather than `script:`. Snakemake's script

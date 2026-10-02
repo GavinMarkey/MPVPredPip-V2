@@ -1,4 +1,4 @@
-"""Stage 1 - build the sequence manifest and normalised FASTA files.
+﻿"""Stage 1 - build the sequence manifest and normalised FASTA files.
 
 No ``from __future__ import annotations`` here, or in any script run through
 Snakemake's ``script:`` directive: Snakemake prepends its own preamble to inject
@@ -11,7 +11,7 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import manifest as manifest_mod  # noqa: E402
+from mpvpredpip import manifest as manifest_mod  # noqa: E402
 
 smk = snakemake  # noqa: F821  (injected by Snakemake)
 

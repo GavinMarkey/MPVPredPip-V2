@@ -1,5 +1,6 @@
-# ============================================================================
-# Ebola linear peptide vaccine-candidate pipeline - master configuration
+﻿# ============================================================================
+# MPVPredPip - Multivalent Peptide-based Vaccine Prediction Pipeline
+# Master configuration
 # ============================================================================
 # Every tunable parameter in the pipeline lives here. The Snakemake workflow
 # and all helper scripts read from this file; nothing is hard-coded in code.
@@ -172,7 +173,7 @@ clustering:
   #
   # This was 0.6, documented as a fraction, because the pipeline was written
   # against the IEDB *web* cluster tool. Clustering is now done in-process by
-  # vaxpipe.cluster, which reimplements the IEDB *standalone*'s identity rule,
+  # mpvpredpip.cluster, which reimplements the IEDB *standalone*'s identity rule,
   # and that rule's scale is 0-100 with a default of 80. Stage 5 refuses a value
   # at or below 1 rather than cluster every epitope in the run together.
   #
@@ -257,10 +258,10 @@ screening:
   autoimmunity:
     enabled: true
     # In-process, not the PIR Peptide Match standalone - see
-    # src/vaxpipe/autoimmunity.py for why, and for the L/I-equivalence caveat
+    # src/mpvpredpip/autoimmunity.py for why, and for the L/I-equivalence caveat
     # that comes with the choice. Kept as a named field so the record of which
     # method produced a result stays in the config rather than only in code.
-    tool: "vaxpipe.autoimmunity"
+    tool: "mpvpredpip.autoimmunity"
     # A consensus peptide sharing an exact substring of this length or longer
     # with the human proteome is flagged as a potential autoimmunity risk.
     min_exact_match_length: 9
@@ -339,7 +340,7 @@ tools:
   antigenicity: "tools/iapred"
   algpred: "tools/algpred2"
   # No peptide_match entry: stage 6's autoimmunity screen is done in-process by
-  # vaxpipe.autoimmunity, not by the PIR standalone. See that module's docstring.
+  # mpvpredpip.autoimmunity, not by the PIR standalone. See that module's docstring.
   consurf: "tools/consurf"
 
 # ----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Stage 3 - run one B-cell predictor and convert per-residue scores to epitopes.
+﻿"""Stage 3 - run one B-cell predictor and convert per-residue scores to epitopes.
 
 Shared by the BepiPred and EpiDope rules: which predictor runs is decided by
 ``params.source_tool``, and the interval-building rules are identical for both so
@@ -25,11 +25,11 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import epitopes as epitope_mod  # noqa: E402
-from vaxpipe import fasta as fasta_mod  # noqa: E402
-from vaxpipe import manifest as manifest_mod  # noqa: E402
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import bcell  # noqa: E402
+from mpvpredpip import epitopes as epitope_mod  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import manifest as manifest_mod  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import bcell  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--fasta", required=True)

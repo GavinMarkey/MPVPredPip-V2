@@ -1,4 +1,4 @@
-# IEDB standalone tools: MHC-I and MHC-II binding, immunogenicity, epitope
+﻿# IEDB standalone tools: MHC-I and MHC-II binding, immunogenicity, epitope
 # clustering and population coverage.
 #
 # The IEDB standalones are conservative about their interpreter: several ship
@@ -6,7 +6,7 @@
 # them working without disturbing the rest of the pipeline.
 #
 # The tools themselves are downloaded separately - see tools/README.md.
-name: vaxpipe-iedb
+name: mpvpredpip-iedb
 channels:
   - conda-forge
   - bioconda
@@ -18,7 +18,7 @@ dependencies:
   # importlib.resources.files() only exists from 3.9. Under 3.8 it fails at
   # import, and because the tool prints that failure to stdout and exits 0, the
   # whole of stage 4 completes reporting zero class I binders. See
-  # _check_binding_output in src/vaxpipe/adapters/iedb.py.
+  # _check_binding_output in src/mpvpredpip/adapters/iedb.py.
   #
   # Deliberately 3.9 and not something newer: mhc_ii is known to work on 3.8, so
   # this is the smallest step that fixes class I without disturbing class II.

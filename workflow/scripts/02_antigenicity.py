@@ -1,4 +1,4 @@
-"""Stage 2 - whole-protein antigenicity screen."""
+﻿"""Stage 2 - whole-protein antigenicity screen."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 
@@ -8,8 +8,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import screening  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import screening  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

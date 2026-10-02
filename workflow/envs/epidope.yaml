@@ -9,7 +9,7 @@
 # as its authors tested it.
 #
 # That environment pins Python 3.6, which cannot parse this codebase, so the
-# workflow never runs vaxpipe code inside it - see the epidope_run and
+# workflow never runs mpvpredpip code inside it - see the epidope_run and
 # epidope_epitopes rules in workflow/rules/03_bcell.smk.
 #
 # Safe to delete once you are happy with that arrangement.

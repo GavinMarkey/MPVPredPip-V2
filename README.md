@@ -1,4 +1,4 @@
-# MPVPredPip v2.0 — Multivalent Peptide-based Vaccine Prediction Pipeline
+﻿# MPVPredPip v2.0 — Multivalent Peptide-based Vaccine Prediction Pipeline
 
 An automated, reproducible pipeline for predicting multivalent peptide-based vaccine candidates. Everything runs offline in a containerized Linux environment. Each stage writes its output into a numbered folder, and the output of each stage is the documented input of the next — so any stage can be inspected, re-run, or replaced independently.
 
@@ -87,7 +87,7 @@ For users comfortable with Docker Compose commands:
 
 4. **Run setup:**
    ```bash
-   docker-compose -f .devcontainer/docker-compose.yml exec vaxpipe \
+   docker-compose -f .devcontainer/docker-compose.yml exec mpvpredpip \
      bash -c "python setup/init_input.py && python setup/check_tools.py"
    ```
 
@@ -95,7 +95,7 @@ For users comfortable with Docker Compose commands:
 
 6. **Run the pipeline:**
    ```bash
-   docker-compose -f .devcontainer/docker-compose.yml exec vaxpipe \
+   docker-compose -f .devcontainer/docker-compose.yml exec mpvpredpip \
      snakemake --use-conda --cores 8
    ```
 
@@ -261,10 +261,10 @@ config.yaml                      Every tunable parameter
 workflow/
   Snakefile                      Stage definitions
   rules/*.smk                    One rule file per stage
-  scripts/*.py                   Thin wrappers calling vaxpipe
+  scripts/*.py                   Thin wrappers calling mpvpredpip
   envs/*.yaml                    Per-rule conda environments
   config/alleles/                MHC allele panels
-src/vaxpipe/                     Core library
+src/mpvpredpip/                     Core library
   adapters/                      Tool-specific wrappers
   schemas.py                     Data structures
   clustering.py, conservation.py etc.
@@ -301,7 +301,7 @@ resources/
 ## Known Limitations & Caveats
 
 - **First-run downloads:** BepiPred downloads ESM-2 models (~2 GB) on the first B-cell prediction run. Subsequent runs use the cache.
-- **Tool adapters unverified:** Predictor invocations (`src/vaxpipe/adapters/`) are based on tool source code and documentation, not exhaustive testing. See `tools/README.md` for which tools have been confirmed on real data.
+- **Tool adapters unverified:** Predictor invocations (src/mpvpredpip/adapters/`) are based on tool source code and documentation, not exhaustive testing. See `tools/README.md` for which tools have been confirmed on real data.
 - **Antigenicity threshold:** The default (`-0.3`) is IApred's Moderate/Low boundary, suitable for peptides. Verify it matches your biological hypothesis before reporting results.
 - **AlgPred model:** The hybrid model uses BLAST and sequence motifs, which have limited power at 20–30 aa length. The pipeline documents this in stage 6's output.
 - **No wet-lab validation:** This is a **computational screen**, not a guarantee of immunogenicity or safety. Validation requires lab testing.

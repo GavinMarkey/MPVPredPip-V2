@@ -7,7 +7,7 @@
 name: mpvpredpip_devcontainer
 
 services:
-  vaxpipe:
+  mpvpredpip:
     build:
       # The build context is the project root, not .devcontainer/, so the
       # Dockerfile can COPY workflow/envs/core.yaml.

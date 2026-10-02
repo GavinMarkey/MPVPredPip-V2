@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Preflight check: report which external tools resolve before a run starts.
 
 Run this after installing the predictors and before the first pipeline run:
@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from vaxpipe import inputs  # noqa: E402
+from mpvpredpip import inputs  # noqa: E402
 
 try:
     import yaml
@@ -202,9 +202,9 @@ def main() -> int:
     print("\nStage 5 - clustering")
     # Not a check: nothing here is required any more. The IEDB cluster standalone
     # only groups peptides - it emits no consensus, which is what stage 5 exists
-    # to produce - and it is Python 2 source. vaxpipe.cluster reimplements its
+    # to produce - and it is Python 2 source. mpvpredpip.cluster reimplements its
     # identity rule and builds the consensus, so stage 5 needs no external tool.
-    print(f"  {OK:<18} {'clustering':<26} {DIM}in-process (vaxpipe.cluster){RESET}")
+    print(f"  {OK:<18} {'clustering':<26} {DIM}in-process (mpvpredpip.cluster){RESET}")
     print(f"  {'':<18} {DIM}The IEDB cluster standalone is not used; see tools/README.md.{RESET}")
 
     print("\nStage 6 - screening")
@@ -218,8 +218,8 @@ def main() -> int:
     ))
     # Not a check, for the same reason as clustering above: the PIR Peptide
     # Match standalone publishes no built jar, and the exact k-mer lookup it
-    # would perform is done in-process by vaxpipe.autoimmunity.
-    print(f"  {OK:<18} {'autoimmunity':<26} {DIM}in-process (vaxpipe.autoimmunity){RESET}")
+    # would perform is done in-process by mpvpredpip.autoimmunity.
+    print(f"  {OK:<18} {'autoimmunity':<26} {DIM}in-process (mpvpredpip.autoimmunity){RESET}")
     print(f"  {'':<18} {DIM}PIR Peptide Match is not used; see tools/README.md.{RESET}")
     results.append(check("Human proteome", screening["autoimmunity"]["human_proteome"], [],
                          enabled=screening["autoimmunity"]["enabled"],

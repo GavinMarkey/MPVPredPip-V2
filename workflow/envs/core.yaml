@@ -1,4 +1,4 @@
-# Orchestration and the vaxpipe helper library.
+# Orchestration and the mpvpredpip helper library.
 # Used by every rule that only moves, parses or summarises data.
 name: mpvpredpip-v2
 channels:

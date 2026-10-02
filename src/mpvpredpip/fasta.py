@@ -1,4 +1,4 @@
-"""Minimal FASTA reading and writing plus NCBI defline parsing.
+﻿"""Minimal FASTA reading and writing plus NCBI defline parsing.
 
 Deliberately dependency-free so that every conda environment in the workflow can
 import it, including the ones pinned to old interpreters for legacy predictors.
@@ -18,7 +18,7 @@ _DEFLINE = re.compile(r"^(?P<accession>\S+)\s*(?P<name>.*?)\s*(?:\[(?P<strain>[^
 #: ``ACCESSION protein name - strain name`` - the filename convention for the
 #: files in "0 - Input". Only a FALLBACK, used when the header lacks a protein
 #: name or a [strain]; note the whitespace required on both sides of the dash.
-#: The notice users see (vaxpipe.inputs) is tested against this pattern.
+#: The notice users see (mpvpredpip.inputs) is tested against this pattern.
 _FILENAME = re.compile(r"^(?P<accession>\S+)\s+(?P<name>.+?)\s+-\s+(?P<strain>.+)$")
 
 _VALID_AA = set("ACDEFGHIKLMNPQRSTVWYBXZJUO")

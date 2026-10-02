@@ -1,4 +1,4 @@
-"""External predictor adapters.
+﻿"""External predictor adapters.
 
 Each module wraps third-party tools that this pipeline does not control:
 
@@ -7,7 +7,7 @@ Each module wraps third-party tools that this pipeline does not control:
                epitope clustering, population coverage (stages 4, 5, 8)
     screening  antigenicity, AlgPred, PIR Peptide Match (stages 2, 6)
 
-All of them follow the contract documented in :mod:`vaxpipe.adapters.base`:
+All of them follow the contract documented in :mod:`mpvpredpip.adapters.base`:
 ``run`` keeps native output untouched on disk, ``parse`` resolves columns by name
 and fails loudly with the header it actually saw.
 """

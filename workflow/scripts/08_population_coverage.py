@@ -1,4 +1,4 @@
-"""Stage 8 - population coverage of the alleles behind each consensus peptide.
+﻿"""Stage 8 - population coverage of the alleles behind each consensus peptide.
 
 Alleles are taken from the T-cell epitopes that are members of each consensus
 peptide's cluster, traced through the stage 5 membership table. That is
@@ -18,8 +18,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import iedb  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import iedb  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--protein", required=True)

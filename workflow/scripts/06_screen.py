@@ -1,4 +1,4 @@
-"""Stage 6 - antigenicity, allergenicity and autoimmunity screening.
+﻿"""Stage 6 - antigenicity, allergenicity and autoimmunity screening.
 
 Hard filters applied to the consensus peptides that passed stage 5. A peptide is
 carried into stage 9 only if it is predicted antigenic, is not predicted
@@ -16,10 +16,10 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import autoimmunity  # noqa: E402
-from vaxpipe import fasta as fasta_mod  # noqa: E402
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import screening  # noqa: E402
+from mpvpredpip import autoimmunity  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import screening  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

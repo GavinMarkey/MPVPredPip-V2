@@ -1,4 +1,4 @@
-"""Boilerplate shared by every Snakemake script in this workflow.
+﻿"""Boilerplate shared by every Snakemake script in this workflow.
 
 Snakemake runs scripts with the working directory set to the project root, so
 ``src`` is located relative to that. A fallback walks up from this file in case
@@ -22,13 +22,13 @@ def bootstrap() -> str:
 
     for root in candidates:
         src = os.path.join(root, "src")
-        if os.path.isdir(os.path.join(src, "vaxpipe")):
+        if os.path.isdir(os.path.join(src, "mpvpredpip")):
             if src not in sys.path:
                 sys.path.insert(0, src)
             return root
 
     raise SystemExit(
-        "Could not locate the 'src/vaxpipe' package.\n"
+        "Could not locate the 'src/mpvpredpip' package.\n"
         f"Looked under: {candidates}\n"
         "Run snakemake from the project root, or pass --directory <project root>."
     )

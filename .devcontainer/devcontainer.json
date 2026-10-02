@@ -1,7 +1,7 @@
 {
   "name": "MPVPredPip - multivalent peptide vaccine prediction pipeline",
   "dockerComposeFile": "docker-compose.yml",
-  "service": "vaxpipe",
+  "service": "mpvpredpip",
   "workspaceFolder": "/workspaces/MPVPredPip",
 
   // Install the library in editable mode so `import vaxpipe` works from any

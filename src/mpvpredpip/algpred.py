@@ -1,11 +1,11 @@
-"""Driving AlgPred 2.0 - everything that must happen before it will start.
+﻿"""Driving AlgPred 2.0 - everything that must happen before it will start.
 
 This module is imported inside ``workflow/envs/algpred.yaml``, which pins
 **Python 3.8 and scikit-learn 0.22**. It therefore uses the standard library
-only, imports nothing else from :mod:`vaxpipe`, and must stay 3.8-compatible.
+only, imports nothing else from :mod:`mpvpredpip`, and must stay 3.8-compatible.
 Parsing AlgPred's output is deliberately *not* here - that happens afterwards
 in the ordinary screening environment, in
-:func:`vaxpipe.adapters.screening.parse_allergenicity`.
+:func:`mpvpredpip.adapters.screening.parse_allergenicity`.
 
 ------------------------------------------------------------------------------
 Why AlgPred needs an environment of its own
@@ -178,7 +178,7 @@ def write_envfile(workdir, tool_dir):
     if os.path.islink(target) or os.path.exists(target):
         os.remove(target)          # replace the symlink to the shipped one
     with open(target, "w") as handle:
-        handle.write("#Generated per run by vaxpipe - see vaxpipe.algpred\n")
+        handle.write("#Generated per run by mpvpredpip - see mpvpredpip.algpred\n")
         handle.write("BLAST:{0}\n".format(blastp))
         handle.write("BLAST database:{0}\n".format(database))
         handle.write("MERCI:{0}\n".format(merci))
@@ -206,7 +206,7 @@ def stage_script(source, destination):
     if "sklearn.externals" in text:
         raise AlgPredError(
             "{0} still imports from sklearn.externals after patching.\n"
-            "Add the required rewrite to PATCHES in src/vaxpipe/algpred.py."
+            "Add the required rewrite to PATCHES in src/mpvpredpip/algpred.py."
             .format(source)
         )
     # Stated as an outcome, not as "did a replacement match". Searching the
@@ -223,7 +223,7 @@ def stage_script(source, destination):
             "consensus peptide while the spike's eight were fine.\n"
             "Most likely the line was reworded upstream and the "
             "'single-sequence' entry in PATCHES no longer matches; update it "
-            "in src/vaxpipe/algpred.py. If upstream has instead fixed this "
+            "in src/mpvpredpip/algpred.py. If upstream has instead fixed this "
             "another way (loadtxt's ndmin=2, say), relax this check."
             .format(source)
         )

@@ -1,4 +1,4 @@
-"""Stage 7 - conservancy of the screened consensus peptides across strains."""
+﻿"""Stage 7 - conservancy of the screened consensus peptides across strains."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 
@@ -6,7 +6,7 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import conservancy as conservancy_mod  # noqa: E402
+from mpvpredpip import conservancy as conservancy_mod  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

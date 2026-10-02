@@ -1,4 +1,4 @@
-"""Tests for the pipeline logic that does not depend on any external tool.
+﻿"""Tests for the pipeline logic that does not depend on any external tool.
 
 Run with:
 
@@ -18,11 +18,11 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from vaxpipe import algpred, autoimmunity, inputs  # noqa: E402
-from vaxpipe import cluster as cluster_mod  # noqa: E402
-from vaxpipe import conservancy, epitopes, fasta, tables  # noqa: E402
-from vaxpipe import manifest as manifest_mod  # noqa: E402
-from vaxpipe.adapters import bcell, iedb, screening  # noqa: E402
+from mpvpredpip import algpred, autoimmunity, inputs  # noqa: E402
+from mpvpredpip import cluster as cluster_mod  # noqa: E402
+from mpvpredpip import conservancy, epitopes, fasta, tables  # noqa: E402
+from mpvpredpip import manifest as manifest_mod  # noqa: E402
+from mpvpredpip.adapters import bcell, iedb, screening  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # per-residue scores -> epitope intervals
@@ -536,7 +536,7 @@ class TestTables:
 
 class TestScreening:
     def test_sliding_windows(self):
-        # Moved to vaxpipe.autoimmunity along with the rest of the human-proteome
+        # Moved to mpvpredpip.autoimmunity along with the rest of the human-proteome
         # screen; the behaviour is unchanged.
         assert autoimmunity.windows("ACDEFGH", 9) == ["ACDEFGH"]
         assert autoimmunity.windows("ACDEFGHIKL", 9) == ["ACDEFGHIK", "CDEFGHIKL"]
@@ -1133,7 +1133,7 @@ class TestEntryPointsAreAbsolute:
 
 
 class TestPercentIdentity:
-    """The IEDB cluster tool's identity rule, reimplemented in vaxpipe.cluster.
+    """The IEDB cluster tool's identity rule, reimplemented in mpvpredpip.cluster.
 
     Transcribed from IEDB_Cluster-1.0's own source. These tests pin the three
     properties that a conventional identity measure would get wrong, so that a

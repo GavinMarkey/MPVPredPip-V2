@@ -1,4 +1,4 @@
-# Stage 5 - epitope clustering and B/T consensus selection.
+﻿# Stage 5 - epitope clustering and B/T consensus selection.
 #
 # B-cell (BepiPred + EpiDope) and T-cell (immunogenic MHC-I + MHC-II) epitopes
 # for one protein are pooled, deduplicated and clustered with the IEDB epitope
@@ -27,10 +27,10 @@ rule clustering_input:
         "../scripts/05_clustering_input.py"
 
 
-# Clustering is done in-process by vaxpipe.cluster, not by the IEDB cluster
+# Clustering is done in-process by mpvpredpip.cluster, not by the IEDB cluster
 # standalone. The standalone only groups peptides - it emits no consensus and no
 # alignment, and stage 5 exists to produce a consensus. Its identity rule is
-# reimplemented faithfully; see src/vaxpipe/cluster.py. This rule therefore needs
+# reimplemented faithfully; see src/mpvpredpip/cluster.py. This rule therefore needs
 # no tool directory and runs in the orchestrator's own environment.
 rule run_cluster:
     input:

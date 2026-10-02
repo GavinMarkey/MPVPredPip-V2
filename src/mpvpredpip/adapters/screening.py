@@ -1,4 +1,4 @@
-"""Stage 2 and 6 adapters - antigenicity, allergenicity and autoimmunity.
+﻿"""Stage 2 and 6 adapters - antigenicity, allergenicity and autoimmunity.
 
 ------------------------------------------------------------------------------
 Antigenicity predictor backends
@@ -228,7 +228,7 @@ def _predict_iapred(
     raise base.ToolError(
         f"Could not drive IAPred at {entry}. Attempts:\n" + "\n".join(attempts) +
         "\n\nIf a release has changed the CLI, correct _IAPRED_ARG_STYLES in "
-        "src/vaxpipe/adapters/screening.py, or set antigenicity.tool: 'external' "
+        "src/mpvpredpip/adapters/screening.py, or set antigenicity.tool: 'external' "
         "and put the real command in antigenicity.command."
     )
 
@@ -416,7 +416,7 @@ _ALGPRED_CALL_COLUMNS = ["prediction", "call", "result", "type"]
 
 # Running AlgPred - entry-point discovery, the rf_model/LFS check, the private
 # working directory, the regenerated envfile and the source patch - lives in
-# vaxpipe.algpred, not here. It executes under workflow/envs/algpred.yaml
+# mpvpredpip.algpred, not here. It executes under workflow/envs/algpred.yaml
 # (Python 3.8, scikit-learn 0.22), which this module's environment is not.
 # Only the parsing below runs in the screening environment.
 
@@ -469,7 +469,7 @@ def parse_allergenicity(
     Parsing only. AlgPred itself runs in its own Snakemake rule under
     ``workflow/envs/algpred.yaml``, because its ``rf_model`` was pickled with
     scikit-learn 0.22 and will not unpickle under the 1.5.2 that IApred
-    requires. :mod:`vaxpipe.algpred` holds the invocation and the reasoning;
+    requires. :mod:`mpvpredpip.algpred` holds the invocation and the reasoning;
     the split keeps that ancient environment free of everything but the tool,
     and keeps output handling here with the rest of stage 6.
 
@@ -518,7 +518,7 @@ def parse_allergenicity(
             f"  Header was: {header}\n\n"
             "AlgPred's -d default (1) reports only allergenic peptides. The run "
             "passes -d 2; if a release has renamed that flag, correct it in "
-            "vaxpipe.algpred rather than treating the gap as a pass."
+            "mpvpredpip.algpred rather than treating the gap as a pass."
         )
     return results
 
@@ -526,7 +526,7 @@ def parse_allergenicity(
 # ---------------------------------------------------------------------------
 # autoimmunity
 # ---------------------------------------------------------------------------
-# Not here. The human-proteome screen is done in-process by vaxpipe.autoimmunity
+# Not here. The human-proteome screen is done in-process by mpvpredpip.autoimmunity
 # rather than by the PIR Peptide Match standalone - that module's docstring
 # records why, and carries the L/I-equivalence caveat that goes with the choice.
 #

@@ -1,4 +1,4 @@
-"""Stage 0 - the folder users put their sequences in, and the rules for them.
+﻿"""Stage 0 - the folder users put their sequences in, and the rules for them.
 
 Everything the pipeline tells a user about their input files comes from this one
 module: the ``README.txt`` written into the folder, the notice printed when the
@@ -11,7 +11,7 @@ the parser does. The documented filename convention is only a *fallback*, and
 not one of the project's own six input files satisfied it - they worked because
 NCBI headers already carry the strain.
 
-What is actually enforced, read off :mod:`vaxpipe.fasta` and pinned by tests
+What is actually enforced, read off :mod:`mpvpredpip.fasta` and pinned by tests
 (``TestInputFolder``) so that this text cannot drift again:
 
 * Protein, strain and accession come from the **header line**,
@@ -40,7 +40,7 @@ EXAMPLE_FILENAME = "NP_066246.1 spike glycoprotein - Zaire ebolavirus.fasta"
 #: accepted sequence extension, which is what keeps it from being read as one.
 README_NAME = "README.txt"
 
-#: What :func:`vaxpipe.fasta._annotate` falls back to when it finds nothing.
+#: What :func:`mpvpredpip.fasta._annotate` falls back to when it finds nothing.
 UNKNOWN_PROTEIN = "unknown protein"
 UNKNOWN_STRAIN = "unknown strain"
 

@@ -1,4 +1,4 @@
-"""Stage 6 autoimmunity screen - exact matching against the human proteome.
+﻿"""Stage 6 autoimmunity screen - exact matching against the human proteome.
 
 A candidate peptide that shares a run of residues with a human protein risks
 provoking a self-reactive response, so stage 6 rejects any consensus peptide
@@ -24,7 +24,7 @@ machinery. A dozen candidates yield a few hundred windows; the proteome is about
 11 MB of residues. :func:`find_matches` answers it in roughly a second.
 
 So the check is reimplemented here, exactly as the IEDB cluster tool is
-reimplemented in :mod:`vaxpipe.cluster` and stage 7's conservancy is
+reimplemented in :mod:`mpvpredpip.cluster` and stage 7's conservancy is
 reimplemented from the IEDB definition - and for the same reason: the dependency
 cost of the original outweighs what it contributes. The index rule and the
 ``java`` environment are gone with it.
@@ -49,7 +49,7 @@ from . import fasta as fasta_mod
 SEPARATOR = "\n"
 
 #: The 20 standard residues. A window containing anything else - most often the
-#: ``X`` that :mod:`vaxpipe.cluster` writes where a cluster's members disagree -
+#: ``X`` that :mod:`mpvpredpip.cluster` writes where a cluster's members disagree -
 #: is not a sequence that can be searched for literally: ``X`` in a candidate
 #: means "unresolved", while ``X`` in the proteome means "unsequenced", and
 #: matching one against the other asserts a correspondence neither file claims.

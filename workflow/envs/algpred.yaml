@@ -1,4 +1,4 @@
-# AlgPred 2.0 only.
+﻿# AlgPred 2.0 only.
 #
 # Separate from screening.yaml because the two tools' scikit-learn requirements
 # are mutually exclusive, which screening.yaml's own comment anticipated:
@@ -13,11 +13,11 @@
 #   satisfy both, so AlgPred gets a rule and an environment of its own - the
 #   same split stage 3 already uses for EpiDope.
 #
-# Nothing of ours enters this environment except vaxpipe.algpred, which is
+# Nothing of ours enters this environment except mpvpredpip.algpred, which is
 # standard-library-only and 3.8-compatible for that reason. Snakemake itself
 # cannot be imported here (its source needs 3.10+), so the rule using this
 # environment must be `shell:`, not `script:`.
-name: vaxpipe-algpred
+name: mpvpredpip-algpred
 channels:
   - conda-forge
   - bioconda

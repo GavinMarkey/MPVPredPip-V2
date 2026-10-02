@@ -1,4 +1,4 @@
-"""Shared machinery for external-tool adapters.
+﻿"""Shared machinery for external-tool adapters.
 
 Every third-party predictor in this pipeline is wrapped by an adapter with two
 halves:
@@ -48,7 +48,7 @@ def run_command(
     frames down inside a predictor's own script.
     """
     printable = " ".join(shlex.quote(part) for part in command)
-    print(f"[vaxpipe] $ {printable}", file=sys.stderr, flush=True)
+    print(f"[mpvpredpip] $ {printable}", file=sys.stderr, flush=True)
 
     merged = dict(os.environ)
     if env:
@@ -227,7 +227,7 @@ def find_column(
         + (f" in {path}" if path else "")
         + f".\n  Tried: {list(candidates)}\n  Header was: {columns}\n\n"
         "The predictor's output format has probably changed. Update the matching "
-        "adapter in src/vaxpipe/adapters/ - the raw output has been preserved."
+        "adapter in src/mpvpredpip/adapters/ - the raw output has been preserved."
     )
 
 

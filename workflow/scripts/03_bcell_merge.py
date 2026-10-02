@@ -1,4 +1,4 @@
-"""Stage 3 - merge BepiPred and EpiDope epitopes into one per-protein table."""
+﻿"""Stage 3 - merge BepiPred and EpiDope epitopes into one per-protein table."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 
@@ -6,8 +6,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import fasta as fasta_mod  # noqa: E402
-from vaxpipe import schemas, tables  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

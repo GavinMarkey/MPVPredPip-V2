@@ -41,9 +41,9 @@ WORKFLOW_DIR = os.path.dirname(os.path.abspath(workflow.snakefile))
 PROJECT_ROOT = os.path.dirname(WORKFLOW_DIR)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 
-from vaxpipe import fasta as _fasta          # noqa: E402
-from vaxpipe import inputs as _inputs        # noqa: E402
-from vaxpipe import manifest as _manifest    # noqa: E402
+from mpvpredpip import fasta as _fasta          # noqa: E402
+from mpvpredpip import inputs as _inputs        # noqa: E402
+from mpvpredpip import manifest as _manifest    # noqa: E402
 
 
 # --- stage folders -----------------------------------------------------------

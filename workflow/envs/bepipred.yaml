@@ -1,4 +1,4 @@
-# BepiPred-3.0.
+﻿# BepiPred-3.0.
 #
 # BepiPred-3.0 runs an ESM-2 protein language model, so this environment carries
 # PyTorch and fair-esm. It is deliberately separate from the EpiDope environment:
@@ -33,7 +33,7 @@
 # First run downloads the ESM-2 weights (~2.5 GB) into the torch hub cache. In
 # the dev container TORCH_HOME points at a named volume so that survives a
 # rebuild; see .devcontainer/docker-compose.yml.
-name: vaxpipe-bepipred
+name: mpvpredpip-bepipred
 channels:
   - conda-forge
   - nodefaults

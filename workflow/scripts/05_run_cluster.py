@@ -1,10 +1,10 @@
-"""Stage 5 - cluster the pooled epitopes and build each cluster's consensus.
+﻿"""Stage 5 - cluster the pooled epitopes and build each cluster's consensus.
 
 This no longer runs the IEDB cluster standalone. That tool only groups peptides -
 it emits no consensus sequence and no alignment, is Python 2 source, and its CLI
 is not the one this script used to build. The clustering and the consensus are
-computed by vaxpipe.cluster instead, from the identity rule reimplemented from
-the standalone's own source. See the module docstring of src/vaxpipe/cluster.py.
+computed by mpvpredpip.cluster instead, from the identity rule reimplemented from
+the standalone's own source. See the module docstring of src/mpvpredpip/cluster.py.
 
 The output file is unchanged: the same layout the IEDB *web* tool produces, which
 05_select_consensus.py reads. Only its producer has changed.
@@ -18,8 +18,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import cluster as cluster_mod  # noqa: E402
-from vaxpipe import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import cluster as cluster_mod  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--fasta", required=True)

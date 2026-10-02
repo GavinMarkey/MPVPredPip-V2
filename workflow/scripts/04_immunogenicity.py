@@ -1,4 +1,4 @@
-"""Stage 4 - class I immunogenicity screen.
+﻿"""Stage 4 - class I immunogenicity screen.
 
 Every MHC class I binder is scored with the IEDB immunogenicity predictor and
 only those above ``tcell.immunogenicity.min_score`` continue, as the pipeline
@@ -16,8 +16,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import iedb  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import iedb  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--binders", required=True)

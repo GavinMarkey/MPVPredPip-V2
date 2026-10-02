@@ -1,4 +1,4 @@
-"""Stage 5 - apply the B/T composition rule and emit consensus peptides."""
+﻿"""Stage 5 - apply the B/T composition rule and emit consensus peptides."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 
@@ -6,8 +6,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import cluster as cluster_mod  # noqa: E402
-from vaxpipe import tables  # noqa: E402
+from mpvpredpip import cluster as cluster_mod  # noqa: E402
+from mpvpredpip import tables  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

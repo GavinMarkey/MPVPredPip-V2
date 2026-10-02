@@ -1,9 +1,9 @@
-# Antigenicity (stages 2 and 6), plus stage 6's screening logic.
+﻿# Antigenicity (stages 2 and 6), plus stage 6's screening logic.
 #
 # Two things are deliberately NOT here:
 #
 #   No JRE. Stage 6's autoimmunity screen used to shell out to the PIR Peptide
-#   Match jar; it is now done in-process by vaxpipe.autoimmunity.
+#   Match jar; it is now done in-process by mpvpredpip.autoimmunity.
 #
 #   No AlgPred. Its rf_model was pickled with scikit-learn 0.22 and cannot be
 #   unpickled under the 1.5.2 pinned below, so it runs in its own rule under
@@ -13,7 +13,7 @@
 # Stage 2 uses this environment too, rather than core.yaml, so that IApred's
 # dependencies live in exactly one place instead of being duplicated into the
 # environment nearly every other rule shares.
-name: vaxpipe-screening
+name: mpvpredpip-screening
 channels:
   - conda-forge
   - bioconda

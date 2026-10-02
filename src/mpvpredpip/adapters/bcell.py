@@ -1,9 +1,9 @@
-"""Stage 3 adapters - linear B-cell epitope prediction (BepiPred and EpiDope).
+﻿"""Stage 3 adapters - linear B-cell epitope prediction (BepiPred and EpiDope).
 
 Both predictors score **every residue** of a protein. Neither emits epitopes
 directly in a form this pipeline can use, so each adapter normalises its native
 output into a per-residue score vector and hands that to
-:func:`vaxpipe.epitopes.residues_to_epitopes`, which applies the thresholds and
+:func:`mpvpredpip.epitopes.residues_to_epitopes`, which applies the thresholds and
 length rules from ``config.yaml``. Keeping the interval logic in one shared place
 means BepiPred and EpiDope epitopes are built by identical rules and stay
 directly comparable in stage 5.
@@ -319,7 +319,7 @@ def _locate_output(out_dir: str, candidates: list[str], tool: str) -> str:
     raise base.ToolError(
         f"Could not find the {tool} per-residue score file in {out_dir}.\n"
         f"  Looked for: {candidates}\n  Files present:\n{listing}\n\n"
-        f"Update the candidate list in src/vaxpipe/adapters/bcell.py for your {tool} version."
+        f"Update the candidate list in src/mpvpredpip/adapters/bcell.py for your {tool} version."
     )
 
 

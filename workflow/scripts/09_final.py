@@ -1,4 +1,4 @@
-"""Stage 9 - assemble the final candidate list and the run report.
+﻿"""Stage 9 - assemble the final candidate list and the run report.
 
 Joins the per-protein tables into one ranked list and records how many candidates
 were lost at each stage. The attrition table is the fastest way to tell a real
@@ -12,8 +12,8 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import fasta as fasta_mod  # noqa: E402
-from vaxpipe import schemas, tables  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
 
 smk = snakemake  # noqa: F821
 

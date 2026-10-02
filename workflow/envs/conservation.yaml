@@ -1,10 +1,10 @@
-# Stage 7 conservation analysis.
+﻿# Stage 7 conservation analysis.
 #
 # MAFFT builds the alignment. The remaining packages are what a local ConSurf
 # installation expects (cd-hit for redundancy reduction, Rate4Site for the
 # conservation scores, a tree builder); they are installed here so that enabling
 # conservation.consurf in config.yaml does not require rebuilding the image.
-name: vaxpipe-conservation
+name: mpvpredpip-conservation
 channels:
   - conda-forge
   - bioconda

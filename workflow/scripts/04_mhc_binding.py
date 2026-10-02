@@ -1,4 +1,4 @@
-"""Stage 4 - MHC class I or class II binding prediction.
+﻿"""Stage 4 - MHC class I or class II binding prediction.
 
 Shared by both binding rules; ``params.mhc_class`` selects which. Reproduces the
 Tepitool selection locally: predict against an explicit allele panel, then keep
@@ -15,11 +15,11 @@ import _common
 
 _common.bootstrap()
 
-from vaxpipe import epitopes as epitope_mod  # noqa: E402
-from vaxpipe import fasta as fasta_mod  # noqa: E402
-from vaxpipe import manifest as manifest_mod  # noqa: E402
-from vaxpipe import schemas, tables  # noqa: E402
-from vaxpipe.adapters import iedb  # noqa: E402
+from mpvpredpip import epitopes as epitope_mod  # noqa: E402
+from mpvpredpip import fasta as fasta_mod  # noqa: E402
+from mpvpredpip import manifest as manifest_mod  # noqa: E402
+from mpvpredpip import schemas, tables  # noqa: E402
+from mpvpredpip.adapters import iedb  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--fasta", required=True)

@@ -1,11 +1,11 @@
-# Stage 6 - antigenicity, allergenicity and autoimmunity screening.
+﻿# Stage 6 - antigenicity, allergenicity and autoimmunity screening.
 #
 # Applied to the consensus peptides that passed stage 5. Unlike stage 2, these
 # are hard filters: a peptide must be predicted antigenic, must not be predicted
 # allergenic, and must not share an exact window of
 # screening.autoimmunity.min_exact_match_length residues with the human proteome.
 #
-# The autoimmunity check is done in-process by vaxpipe.autoimmunity rather than
+# The autoimmunity check is done in-process by mpvpredpip.autoimmunity rather than
 # by the PIR Peptide Match standalone. That tool is free but publishes no built
 # jar, and the work it would do here - exact k-mer lookup over a 20,000-protein
 # FASTA for about a dozen peptides - takes roughly a second in Python. See the

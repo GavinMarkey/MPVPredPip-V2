@@ -1,4 +1,4 @@
-# Stage 1 - sequence retrieval, validation and normalisation.
+﻿# Stage 1 - sequence retrieval, validation and normalisation.
 #
 # The user supplies NCBI protein FASTA files in "0 - Input" (sequences.input_dir
 # in config.yaml) - a folder this pipeline only ever reads, which is why the
@@ -9,7 +9,7 @@
 # deflines of the form "Protein|Strain|Accession". Everything downstream keys
 # off those.
 #
-# The naming rules are in vaxpipe.inputs, which is also the source of the
+# The naming rules are in mpvpredpip.inputs, which is also the source of the
 # messages users see - run `python setup/init_input.py` to read or check them.
 
 

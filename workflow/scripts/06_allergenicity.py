@@ -1,4 +1,4 @@
-"""Stage 6 - run AlgPred 2.0 and keep its raw CSV.
+﻿"""Stage 6 - run AlgPred 2.0 and keep its raw CSV.
 
 Driven by `shell:`, not `script:`, and run under workflow/envs/algpred.yaml,
 which pins Python 3.8 and scikit-learn 0.22 so that AlgPred's rf_model will
@@ -6,7 +6,7 @@ unpickle. Snakemake 9 cannot be imported at that Python version, which is why
 this takes its arguments on the command line - the same arrangement stage 3
 uses for EpiDope.
 
-Only vaxpipe.algpred is imported here, and that module is standard-library-only
+Only mpvpredpip.algpred is imported here, and that module is standard-library-only
 for this reason. Parsing the CSV happens afterwards, in the ordinary screening
 environment.
 """
@@ -28,7 +28,7 @@ def main():
 
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(here)), "src"))
-    from vaxpipe import algpred  # noqa: E402
+    from mpvpredpip import algpred  # noqa: E402
 
     handle = None
     if args.log:
