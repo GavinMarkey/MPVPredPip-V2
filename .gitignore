@@ -6,6 +6,9 @@
 tools/*/
 !tools/README.md
 resources/human/*.fasta
+resources/conservancy/*/*.fasta
+# Keep the provenance JSON — it is the audit trail for reproducibility.
+!resources/conservancy/*/*.provenance.json
 
 # Your input sequences in "0 - Input" ARE tracked (with its README.txt, which
 # also keeps the otherwise-empty folder in the repository). Everything from

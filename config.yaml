@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 # MPVPredPip - Multivalent Peptide-based Vaccine Prediction Pipeline
 # Master configuration
 # ============================================================================
@@ -125,8 +125,7 @@ bcell:
     #
     # 0.7 is a deliberate relaxation, not a corrected value: it buys more
     # clusters that can satisfy the composition rule, at the cost of weaker
-    # evidence per B-cell epitope. Raise it back to 0.818 to reproduce the
-    # author-default behaviour, and expect near-zero candidates.
+    # evidence per B-cell epitope, 0.818 is the author-default behaviour.
     threshold: 0.7
     epitope_length: 14
     epitope_step: 2
@@ -148,13 +147,13 @@ bcell:
 # recommended allele panel and percentile cut-offs.
 tcell:
   mhc_i:
-    method: "netmhcpan_el"    # IEDB standalone method name
+    method: "IEDB_recommended"
     peptide_lengths: [9]
     percentile_cutoff: 1.0    # keep binders with percentile rank <= this
     allele_file: "workflow/config/alleles/mhc_i_alleles.txt"
 
   mhc_ii:
-    method: "netmhciipan_el"
+    method: "IEDB_recommended"
     peptide_lengths: [15]
     percentile_cutoff: 10.0
     allele_file: "workflow/config/alleles/mhc_ii_alleles.txt"
@@ -182,7 +181,26 @@ clustering:
   # is divided by the LONGER length - except that an exact substring scores 99.9.
   # Raising this makes clusters tighter and their consensus more likely to be a
   # real peptide; see reject_ambiguous_consensus below.
-  threshold: 60
+  #
+  # "MAX:MIN" sweeps a RANGE, tightest first, in steps of 10: "90:50" runs 90,
+  # 80, 70, 60 and 50. A single number still means a single threshold.
+  #
+  # Each threshold is an independent clustering of the same epitopes, not a
+  # refinement of the one before, and everything that passes at ANY of them is
+  # screened by stage 6. That is the point of the sweep: a tight threshold
+  # yields a consensus closer to a real peptide, a loose one is likelier to
+  # gather all four epitope types into a single cluster and pass the rule at
+  # all, and which one a given candidate needs is not known in advance.
+  #
+  # Cluster numbering restarts at 1.1 for each threshold, so the outputs carry a
+  # `threshold` column and consensus ids embed it (Spike_Consensus_90_1.1).
+  # A peptide passing at several thresholds is screened once, attributed to the
+  # tightest.
+  #
+  # Cost is roughly linear: five thresholds means five clusterings. Clustering
+  # is in-process and fast relative to stages 3 and 4, but stage 6 onwards then
+  # screen a larger pooled set.
+  threshold: "90:50"
   # Collapse identical peptides before clustering (the tool's --unique=on).
   unique: true
   # `method` used to be here, set to "cluster-break". That is a web-tool option;
@@ -196,9 +214,24 @@ clustering:
     min_mhc_ii: 1
     min_bepipred: 1
     min_epidope: 1
+    # How many distinct strains a cluster's members must span between them.
+    #
+    # This is the multi-species criterion: a cluster whose epitopes all come from
+    # one strain produces a consensus valid for that strain alone, which is a
+    # materially weaker candidate than one every strain supports. Set it to the
+    # number of strains in `0 - Input/` to demand full coverage - 3 for the Ebola
+    # set (Bundibugyo, Sudan, Zaire) analysed here.
+    #
+    # 0 disables the check.
+    # Raising it is the single most selective knob in stage 5: a cluster
+    # must contain epitopes predicted independently in the selected number of strains,
+    # so expect the passing count to fall sharply when enabled. The per-cluster reason in
+    # `5 - B_T-cell_consensus/<protein>/summary.md` names the strain count each
+    # rejected cluster actually reached.
+    min_strains: 0
   # If false, a cluster passes with a B-cell epitope from EITHER B-cell tool
   # (min_bepipred + min_epidope are then summed into a single requirement).
-  require_both_bcell_tools: true
+  require_both_bcell_tools: false
 
   # Consensus sequences containing an ambiguous residue are discarded (this
   # reproduces the "'X' not in alignment column" check of the previous pipeline).
@@ -255,6 +288,78 @@ screening:
     # Database/ directory, so it cannot run from the pip wheel - see
     # setup/install_algpred.sh and workflow/envs/screening.yaml.
     model: 2
+    # Whether an ALLERGEN call removes the peptide, or is only recorded.
+    #
+    # false, deliberately. Everything above argues the call is weak evidence
+    # here: the hybrid degenerates to composition alone at 20-30 aa, and all
+    # nine peptides on this run landed within 0.12 of the threshold - 0.248 to
+    # 0.416 against a cut at 0.3. Dropping on a one-component score that close
+    # to its boundary discards candidates the evidence cannot actually separate.
+    #
+    # Advisory does not mean ignored. The call and its score stay in the
+    # `allergen` and `allergen_score` columns of screening.tsv, and the reason
+    # column carries a NOTE so it cannot be missed - the same convention stage 6
+    # already uses for partly-screened autoimmunity windows. The peptide is no
+    # longer failed on it.
+    #
+    # Set to true to restore the hard filter. Do that if the hybrid stops
+    # degenerating - full-length proteins, or peptides that genuinely hit the
+    # IgE motifs - because then the 0.3 threshold is being applied to the
+    # three-component score it was characterised on, and the call is strong
+    # enough to act on. Stage 6's summary says which components were inert, so
+    # that condition is visible per run rather than assumed.
+    drop_on_allergen: false
+  # Allergen homology - sequence evidence to set beside AlgPred's composition
+  # score, which is all the hybrid amounts to at this peptide length.
+  #
+  # Two criteria, because one number cannot serve both lengths this pipeline
+  # handles. The full reasoning, and the null-model measurement behind the
+  # defaults, is in src/mpvpredpip/allergen_homology.py.
+  allergen_homology:
+    enabled: true
+    allergens: "workflow/allergens_dataset.fasta"
+    # --- criterion 1: contiguous exact match, on the CONSTITUENT EPITOPES ---
+    #
+    # 8 is the FAO/WHO and EFSA short-sequence criterion. It is length-honest:
+    # eight identical residues in a row mean the same thing whether the query
+    # is eight residues or eight hundred, which is exactly what a percentage
+    # fails to do here.
+    #
+    # Run on the constituent epitopes, not the consensus, and that distinction
+    # matters. The consensus is synthesised by mpvpredpip.cluster from a
+    # cluster's aligned members, so it need not occur in any real protein -
+    # which is why stage 7 reports 0% conservancy for candidates whose members
+    # are well conserved. Searching it for literal matches would ask whether a
+    # sequence that may exist nowhere shares a window with an allergen. The
+    # constituent epitopes are real predicted sequences.
+    exact_match_length: 8
+    drop_on_exact_match: true
+    # --- criterion 2: percent identity, on the CONSENSUS sequence -----------
+    #
+    # 30 is the familiar protein-homology figure and it is sound for
+    # full-length proteins and domains, where the identity/homology
+    # relationship was established. That relationship is steeply
+    # length-dependent, though, and at 20-30 aa this threshold is at chance.
+    #
+    # Measured on this pipeline's own candidates against the 2426-sequence set,
+    # using each peptide's shuffled self as a null - shuffling keeps length and
+    # amino-acid composition, destroys homology:
+    #
+    #                          real (n=5)   shuffled (n=10)
+    #   mean identity %        5.9          5.9
+    #   max identity %         35.9         34.5
+    #   >= 30% flagged         5/5          8/10
+    #
+    # So it flags composition-matched noise about as readily as the real thing.
+    # On the current nine candidates it flags all nine, at 34.5-47.6%, with
+    # best matches to human interferon beta, bovine fibrinogen and honeybee
+    # vitellogenin - unrelated proteins reached through a short window.
+    identity_threshold: 30
+    # Hence false: computed and recorded, but not grounds to remove a candidate
+    # on its own. Set true only alongside a threshold that means something at
+    # the query length - the FAO/WHO percentage criterion pairs 35% with an
+    # 80-residue window, which is longer than anything stage 5 emits.
+    drop_on_identity: false
   autoimmunity:
     enabled: true
     # In-process, not the PIR Peptide Match standalone - see
@@ -276,6 +381,25 @@ conservation:
   # Redundant (identical) input sequences are collapsed before conservancy
   # analysis so that percentages are not inflated by duplicate submissions.
   deduplicate_inputs: true
+
+  # ---------------------------------------------------------------------------
+  # Reference sets from NCBI — real strain variation, not the 3 input FASTAs.
+  #
+  # Run ``python setup/fetch_ncbi_conservancy.py`` to download them into
+  # resources/conservancy/.  This is a setup step, not a DAG rule, because
+  # NCBI contents change over time and fetching inside the DAG would make
+  # two runs silently incomparable.
+  #
+  # The script reads the stage 1 manifest to discover every (protein, strain)
+  # pair automatically.  The search term is "<protein_name> <strain>" from the
+  # manifest, filtered to sequences within ±length_margin of the input length.
+  # No manual per-pair configuration is needed.
+  # ---------------------------------------------------------------------------
+  reference_sets:
+    enabled: true
+    email: ""        # NCBI asks automated clients to identify themselves
+    api_key: ""      # optional; raises rate limit from 3/s to 10/s
+    length_margin: 5 # NCBI [SLEN] filter: input_length ± this many residues
 
   conservancy:
     # "local"  - run the reimplemented IEDB conservancy algorithm offline
@@ -301,8 +425,18 @@ conservation:
 # ----------------------------------------------------------------------------
 population_coverage:
   # IEDB population coverage standalone.
-  # "I", "II" or "I,II" (combined class I + class II calculation)
-  mhc_class: "I,II"
+  #
+  # Comma-separated list of the calculations to run: "I", "II" and "combined".
+  # These are SEPARATE analyses, not a syntax for combining classes - "I,II"
+  # asks for a class I figure and a class II figure, and does NOT produce the
+  # combined one. Only "combined" does that: it is the fraction of people
+  # carrying at least one allele of EITHER class that binds the peptide, and it
+  # is the headline number the IEDB web tool shows. The config previously said
+  # "I,II" meant combined, so that figure was never computed.
+  #
+  # Each requested calculation becomes a row per peptide per population in
+  # population_coverage.tsv, tagged in the mhc_class column.
+  mhc_class: "I,II,combined"
   populations:
     - "World"
     - "East Africa"
@@ -348,5 +482,18 @@ tools:
 # ----------------------------------------------------------------------------
 resources:
   threads_per_job: 4
-  # Some IEDB predictors are memory hungry; cap concurrent heavy jobs.
-  max_heavy_jobs: 2
+  # How many memory-bound jobs may run at once. Enforced by heavy_job_threads()
+  # in workflow/Snakefile, which converts it into a `threads` claim - see there
+  # for why it is expressed that way rather than as a `resources:` entry.
+  #
+  # 1, not 2. This was 2 and wired to nothing, so with threads_per_job: 4 and
+  # --cores 8 two BepiPred jobs ran together, each loading its own copy of ESM-2
+  # 650M - roughly 2.5 GB of weights before activations, and the tool has no
+  # batch-size or memory option to turn down. The kernel killed one with
+  # SIGKILL, which arrives as exit code -9 and an empty stderr: the process
+  # never gets to write a traceback, so nothing in the output says "out of
+  # memory". That is the whole reason this value now has teeth.
+  #
+  # Raise it to 2 if the machine has memory to spare - roughly 8 GB free for
+  # two concurrent ESM-2 jobs - and stage 3 then takes about half as long.
+  max_heavy_jobs: 1

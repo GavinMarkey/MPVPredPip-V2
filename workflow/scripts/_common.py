@@ -1,4 +1,4 @@
-﻿"""Boilerplate shared by every Snakemake script in this workflow.
+"""Boilerplate shared by every Snakemake script in this workflow.
 
 Snakemake runs scripts with the working directory set to the project root, so
 ``src`` is located relative to that. A fallback walks up from this file in case
@@ -74,10 +74,29 @@ def log_path(smk) -> str | None:
         return None
 
 
+def md_cell(value: object) -> str:
+    """Escape a value for use inside a markdown table cell.
+
+    GitHub-flavoured markdown splits a table row on `|` before it parses
+    inline spans, so a pipe inside a cell opens a new column even within
+    backticks - code spans do not protect it. The FASTA headers this pipeline
+    carries are `protein|strain|accession`, so an unescaped sequence id turns a
+    four-column row into six and the table stops rendering as a table at all.
+    Escaping each pipe with a single backslash is the documented fix; it
+    renders as a bare pipe.
+    """
+    return str(value).replace("|", "\\|")
+
+
 def write_summary(path: str, title: str, lines: list[str]) -> None:
     """Write a short per-stage markdown summary next to the stage's tables."""
     os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(f"# {title}\n\n")
         for line in lines:
-            handle.write(line.rstrip() + "\n")
+            # Only the newline, never trailing spaces. Five of these scripts
+            # end a metadata line with two spaces, which is markdown's hard
+            # line break; a plain .rstrip() silently ate them and ran
+            # "Predictor:", "Threshold:" and "Sequences scored:" together
+            # into a single paragraph.
+            handle.write(line.rstrip("\r\n") + "\n")

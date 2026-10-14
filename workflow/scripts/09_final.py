@@ -1,4 +1,4 @@
-﻿"""Stage 9 - assemble the final candidate list and the run report.
+"""Stage 9 - assemble the final candidate list and the run report.
 
 Joins the per-protein tables into one ranked list and records how many candidates
 were lost at each stage. The attrition table is the fastest way to tell a real
@@ -34,16 +34,40 @@ with _common.tee_log(_common.log_path(smk)):
     clusters = load_all(smk.input.clusters)
     members = load_all(smk.input.members)
     screening = load_all(smk.input.screening)
-    conservancy = {row["consensus_id"]: row for row in load_all(smk.input.conservancy)}
+    # Conservancy now produces one row per (consensus, strain).  Group by
+    # consensus and report the minimum across strains — the weakest strain
+    # bounds a multi-strain claim (100% in Zaire and 40% in Sudan is a 40%
+    # candidate, not a 100% one).  Per-strain values are stored alongside.
+    conservancy_rows = load_all(smk.input.conservancy)
+    conservancy_by_id: dict[str, list[dict]] = {}
+    for row in conservancy_rows:
+        conservancy_by_id.setdefault(row["consensus_id"], []).append(row)
 
+    # World coverage is each candidate's OWN figure. Stage 8 submits every
+    # peptide to the IEDB tool separately for exactly this reason: the set
+    # figure describes what the peptides achieve together and is identical for
+    # all of them, so ranking on it compared nothing. The set figure is still
+    # in the stage 8 table under consensus_id "ALL", and is reported below.
+    #
+    # "combined" is the class I + class II calculation - see
+    # population_coverage.mhc_class in config.yaml. Rows for class I and class
+    # II alone are in the stage 8 table too.
     coverage_rows = load_all(smk.input.coverage)
-    world_coverage: dict[str, str] = {}
+    world_coverage: dict[str, str] = {}       # consensus_id -> its own coverage
+    set_world_coverage: dict[str, str] = {}   # protein_label -> the "ALL" row
     alleles_by_consensus: dict[str, str] = {}
     for row in coverage_rows:
-        if row["consensus_id"] == "ALL" and row["population"].strip().lower() == "world":
-            world_coverage[row["protein_label"]] = row["coverage_percent"]
-        elif row["consensus_id"] != "ALL":
+        world_combined = (
+            row["population"].strip().lower() == "world"
+            and str(row["mhc_class"]).strip().lower() == "combined"
+        )
+        if row["consensus_id"] == "ALL":
+            if world_combined:
+                set_world_coverage[row["protein_label"]] = row["coverage_percent"]
+        else:
             alleles_by_consensus[row["consensus_id"]] = row["alleles"]
+            if world_combined:
+                world_coverage[row["consensus_id"]] = row["coverage_percent"]
 
     cluster_by_id = {row["consensus_id"]: row for row in clusters}
 
@@ -73,7 +97,19 @@ with _common.tee_log(_common.log_path(smk)):
     for row in passing:
         consensus_id = row["consensus_id"]
         cluster = cluster_by_id.get(consensus_id, {})
-        cons = conservancy.get(consensus_id, {})
+
+        # Aggregate conservancy: minimum across strains, with per-strain detail.
+        cons_rows = conservancy_by_id.get(consensus_id, [])
+        if cons_rows:
+            min_cons = min(tables.as_float(r.get("conservancy_percent", ""), 0.0) for r in cons_rows)
+            per_strain = "|".join(
+                f"{r.get('strain', '?')}:{r.get('conservancy_percent', '?')}%"
+                for r in sorted(cons_rows, key=lambda r: str(r.get("strain", "")))
+            )
+        else:
+            min_cons = ""
+            per_strain = ""
+
         final_rows.append(
             {
                 "consensus_id": consensus_id,
@@ -88,9 +124,15 @@ with _common.tee_log(_common.log_path(smk)):
                 "n_strains": row.get("n_strains", "") or cluster.get("n_strains", ""),
                 "antigenicity_score": row.get("antigenicity_score", ""),
                 "allergen_score": row.get("allergen_score", ""),
+                "allergen": tables.as_bool(row.get("allergen", False)),
+                "allergen_identity_percent": row.get("allergen_identity_percent", ""),
+                "allergen_homology_risk": tables.as_bool(
+                    row.get("allergen_homology_risk", False)
+                ),
                 "human_match_count": row.get("human_match_count", 0),
-                "conservancy_percent": cons.get("conservancy_percent", ""),
-                "world_coverage_percent": world_coverage.get(row["protein_label"], ""),
+                "conservancy_percent": min_cons,
+                "conservancy_per_strain": per_strain,
+                "world_coverage_percent": world_coverage.get(consensus_id, ""),
                 "n_bepipred": cluster.get("n_bepipred", ""),
                 "n_epidope": cluster.get("n_epidope", ""),
                 "n_mhc_i": cluster.get("n_mhc_i", ""),
@@ -145,19 +187,40 @@ with _common.tee_log(_common.log_path(smk)):
 
     # --- report --------------------------------------------------------------
     stage_dirs = dict(smk.params.stage_dirs)
+    # Said from the table rather than from the config: allergenicity is advisory
+    # by default, so a candidate can reach this list having been CALLED an
+    # allergen. The old wording asserted every candidate was "non-allergenic",
+    # which silently became false the moment that screen stopped dropping
+    # peptides - the most load-bearing sentence in the report, wrong, with
+    # nothing to flag it. Counting the rows cannot drift from what is in them.
+    flagged = [row for row in final_rows if row["allergen"]]
     lines = [
         f"**{len(final_rows)}** consensus epitopes passed every stage of the pipeline.",
         "",
         "Each of them contains, within one cluster, at least one MHC class I epitope, one",
         "MHC class II epitope and B-cell epitopes from both BepiPred and EpiDope; is",
-        "predicted antigenic and non-allergenic; and has no exact match to the human",
-        "proteome.",
+        "predicted antigenic; and has no exact match to the human proteome.",
         "",
+    ]
+    if flagged:
+        lines.extend([
+            f"**{len(flagged)} of the {len(final_rows)} were predicted allergenic** "
+            "by AlgPred and are on this list anyway, because allergenicity is "
+            "advisory rather than a hard filter at this peptide length - see "
+            "`screening.allergenicity.drop_on_allergen` in config.yaml and the "
+            "caveats in each protein's stage 6 summary. The `allergen` and "
+            "`allergen_score` columns below carry the call, and these candidates "
+            "need an allergenicity assessment that does not rest on amino-acid "
+            "composition alone before being taken forward: "
+            + ", ".join(f"`{row['consensus_id']}`" for row in flagged) + ".",
+            "",
+        ])
+    lines.extend([
         "## Attrition by stage",
         "",
         "| Protein | Strains | B-cell peptides | T-cell peptides | Clusters | Passed stage 5 | Passed stage 6 |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
+    ])
     for row in attrition:
         lines.append(
             f"| {row['protein']} | {row['strains']} | {row['bcell_peptides']} | "
@@ -168,15 +231,31 @@ with _common.tee_log(_common.log_path(smk)):
     lines += ["", "## Final candidates", ""]
     if final_rows:
         lines += [
-            "| Rank | ID | Protein | Sequence | Len | Antigenicity | Conservancy | World coverage |",
-            "| ---: | --- | --- | --- | ---: | ---: | ---: | ---: |",
+            "`World coverage` is each candidate's own, class I and II combined.",
+            "",
+            "| Rank | ID | Protein | Sequence | Len | Antigenicity | Min conservancy | Per strain | World coverage |",
+            "| ---: | --- | --- | --- | ---: | ---: | ---: | --- | ---: |",
         ]
         for row in final_rows:
+            cons_pct = row["conservancy_percent"]
+            cons_str = f"{cons_pct}%" if cons_pct != "" else "-"
+            per_strain = _common.md_cell(str(row.get("conservancy_per_strain", ""))) or "-"
             lines.append(
-                f"| {row['rank']} | `{row['consensus_id']}` | {row['protein_label']} | "
+                f"| {row['rank']} | `{_common.md_cell(str(row['consensus_id']))}` "
+                f"| {row['protein_label']} | "
                 f"`{row['sequence']}` | {row['length']} | {row['antigenicity_score']} | "
-                f"{row['conservancy_percent']}% | {row['world_coverage_percent']}% |"
+                f"{cons_str} | {per_strain} | {row['world_coverage_percent']}% |"
             )
+        if set_world_coverage:
+            lines += [
+                "",
+                "Taken together, per protein (the `ALL` rows of the stage 8 table) - "
+                "the fraction of the World population responding to at least one of "
+                "that protein's candidates:",
+                "",
+            ]
+            for protein_label in sorted(set_world_coverage):
+                lines.append(f"- **{protein_label}**: {set_world_coverage[protein_label]}%")
     else:
         lines += [
             "No candidates survived every filter. Work back through the per-stage",

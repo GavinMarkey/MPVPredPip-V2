@@ -1,4 +1,4 @@
-﻿# AlgPred 2.0 only.
+# AlgPred 2.0 only.
 #
 # Separate from screening.yaml because the two tools' scikit-learn requirements
 # are mutually exclusive, which screening.yaml's own comment anticipated:

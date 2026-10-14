@@ -1,4 +1,4 @@
-﻿# Stage 3 - linear B-cell epitope prediction.
+# Stage 3 - linear B-cell epitope prediction.
 #
 # BepiPred and EpiDope each run once per protein (the per-protein FASTA already
 # holds every strain, so one invocation covers them all and keeps per-strain
@@ -40,7 +40,12 @@ rule bepipred:
         min_region=config["bcell"]["bepipred"]["min_region_length"],
         merge_gap=config["bcell"]["bepipred"]["merge_gap"],
         source_tool="bepipred",
-    threads: config["resources"]["threads_per_job"]
+    # A scheduling weight, not a thread count - predict_bepipred takes no
+    # threads argument, and BepiPred's CLI exposes none. It is here to stop two
+    # of these running at once: each loads its own ESM-2 650M, and the tool
+    # offers no batch-size or memory flag, so concurrency is the only lever.
+    # See heavy_job_threads() in the Snakefile and resources.max_heavy_jobs.
+    threads: heavy_job_threads()
     log:
         f"{S3}/{{protein}}/logs/bepipred.log",
     conda:

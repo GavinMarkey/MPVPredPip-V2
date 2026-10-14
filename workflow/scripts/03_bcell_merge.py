@@ -1,4 +1,4 @@
-﻿"""Stage 3 - merge BepiPred and EpiDope epitopes into one per-protein table."""
+"""Stage 3 - merge BepiPred and EpiDope epitopes into one per-protein table."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 

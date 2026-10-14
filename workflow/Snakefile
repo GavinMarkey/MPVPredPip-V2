@@ -36,11 +36,12 @@ min_version("7.0")
 configfile: "config.yaml"
 
 
-# --- make the vaxpipe package importable from every script -------------------
+# --- make the mpvpredpip package importable from every script -------------------
 WORKFLOW_DIR = os.path.dirname(os.path.abspath(workflow.snakefile))
 PROJECT_ROOT = os.path.dirname(WORKFLOW_DIR)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 
+from mpvpredpip import cluster as _cluster      # noqa: E402
 from mpvpredpip import fasta as _fasta          # noqa: E402
 from mpvpredpip import inputs as _inputs        # noqa: E402
 from mpvpredpip import manifest as _manifest    # noqa: E402
@@ -92,8 +93,91 @@ def discover_proteins():
 PROTEINS = discover_proteins()
 
 
+# --- discover (protein, strain) pairs for the NCBI reference sets ------------
+# The same scan stage 1 uses to write the manifest, so these pairs agree with it
+# by construction rather than by coincidence.
+#
+# Read from the input files rather than from the manifest, deliberately. The
+# conservancy fetch rule needs its output paths known when the DAG is built, and
+# the manifest is a stage 1 output: on a full run it does not exist yet at that
+# point. Deriving these from it returned an empty list at DAG time and a
+# populated one later, when `params` was evaluated - and that skew is what let
+# stage 7 be scheduled with no reference FASTAs among its inputs and then fail
+# inside the script on a path Snakemake had never been told to build. The input
+# files are static, so reading them gives the same answer at every point in a run.
+def discover_strain_pairs():
+    """``[(protein_label, strain, slug)]`` for every input sequence."""
+    aliases = config["sequences"].get("protein_aliases", {})
+    extensions = config["sequences"]["extensions"]
+    try:
+        records = _manifest.collect(INPUT_DIR, extensions, aliases)
+    except SystemExit as error:
+        # collect() exits for a missing or empty input directory. At DAG-build
+        # time that has to surface as a WorkflowError, or Snakemake reports a
+        # bare exit saying nothing about the inputs.
+        raise WorkflowError(str(error)) from None
+
+    seen = set()
+    pairs = []
+    for record in records:
+        key = (record.protein_label, record.strain)
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append((record.protein_label, record.strain, _manifest.slug(record.strain)))
+    return sorted(pairs)
+
+
+STRAIN_PAIRS = discover_strain_pairs()
+
+#: Every reference FASTA the conservancy fetch is responsible for, keyed by
+#: ``(protein, slug)``. Empty when reference sets are switched off, which is what
+#: lets the fetch rule be defined only when there is something for it to fetch.
+REFERENCE_SET_PATHS = (
+    {
+        (protein, slug): f"resources/conservancy/{protein}/{slug}.fasta"
+        for protein, _strain, slug in STRAIN_PAIRS
+    }
+    if config.get("conservation", {}).get("reference_sets", {}).get("enabled")
+    else {}
+)
+
+# Stage 5 clusters at several identity thresholds rather than one. Resolved
+# here so a malformed clustering.threshold stops the run while the DAG is being
+# built, naming the problem, instead of failing inside a job.
+try:
+    CLUSTER_THRESHOLDS = _cluster.parse_threshold_sweep(config["clustering"]["threshold"])
+except ValueError as error:
+    raise WorkflowError(str(error)) from None
+
+
+# --- scheduling weight for memory-bound rules -------------------------------
+def heavy_job_threads():
+    """Threads to claim so at most ``resources.max_heavy_jobs`` run concurrently.
+
+    ``threads`` is used here as a scheduling weight rather than a thread count,
+    because it is the only concurrency limit Snakemake enforces from ``--cores``
+    alone. A custom ``resources:`` entry does nothing unless ``--resources`` is
+    also passed on the command line, which is far too easy to omit - and the
+    failure mode when it is omitted is a killed job, not a warning.
+
+    This is what ``resources.max_heavy_jobs`` in config.yaml was declared for.
+    It had never been wired to anything: with ``threads_per_job: 4`` and
+    ``--cores 8``, two BepiPred jobs were scheduled at once, each loading its own
+    copy of ESM-2 650M, and the kernel killed one of them with SIGKILL - which
+    surfaces as exit code -9 and an empty stderr, since a killed process never
+    gets to write a traceback.
+    """
+    cores = getattr(workflow, "cores", 0) or 1
+    cap = max(1, int(config["resources"].get("max_heavy_jobs", 1)))
+    return max(1, cores // cap)
+
+
 wildcard_constraints:
     protein="[A-Za-z0-9_.-]+",
+    # Digits only, so "cluster_raw_90.csv" cannot also be read as a protein
+    # called "raw" at threshold "90.csv".
+    threshold=r"\d+",
 
 
 # --- target ------------------------------------------------------------------

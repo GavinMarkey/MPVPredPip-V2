@@ -1,4 +1,4 @@
-﻿"""Stage 6 - run AlgPred 2.0 and keep its raw CSV.
+"""Stage 6 - run AlgPred 2.0 and keep its raw CSV.
 
 Driven by `shell:`, not `script:`, and run under workflow/envs/algpred.yaml,
 which pins Python 3.8 and scikit-learn 0.22 so that AlgPred's rf_model will

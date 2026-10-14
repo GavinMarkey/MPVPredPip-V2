@@ -1,4 +1,4 @@
-﻿"""Canonical table schemas passed between pipeline stages.
+"""Canonical table schemas passed between pipeline stages.
 
 Every stage reads and writes tab-separated files with these exact columns. Tool
 specific formats are converted at the edges (see ``mpvpredpip.adapters``) so that
@@ -54,11 +54,20 @@ EPITOPES_NR = [
 # --- stage 5 -----------------------------------------------------------------
 CLUSTERS = [
     "protein_label",
+    # Identity threshold this clustering was run at. Stage 5 sweeps a range
+    # (clustering.threshold, e.g. "90:50"), and cluster_id restarts at 1.1 for
+    # each one, so neither column identifies a cluster on its own.
+    "threshold",
     "cluster_id",          # e.g. 2.2  (cluster.sub-cluster)
-    "consensus_id",        # e.g. Spike_Consensus_2.2
+    "consensus_id",        # e.g. Spike_Consensus_90_2.2 - carries the threshold
     "consensus_sequence",
     "consensus_length",
     "n_members",
+    # Members discarded because they did not match the consensus exactly. The
+    # consensus is a majority vote, so a member can be outvoted at a position and
+    # then no longer contain the sequence it is filed under; those are removed
+    # before anything is counted. See prune_to_consensus in cluster.py.
+    "n_members_dropped",
     "n_bepipred",
     "n_epidope",
     "n_mhc_i",
@@ -79,6 +88,7 @@ CLUSTERS = [
 
 CLUSTER_MEMBERS = [
     "protein_label",
+    "threshold",           # see CLUSTERS above
     "cluster_id",
     "consensus_id",
     "member_index",
@@ -118,7 +128,19 @@ SCREENING = [
     "antigenicity_score",
     "antigenic",
     "allergen_score",
-    "allergen",            # True means predicted allergen -> fails
+    "allergen",            # True means predicted allergen -> advisory by default
+    # Allergen homology, by two criteria that answer different questions - see
+    # mpvpredpip.allergen_homology. The exact criterion runs on the CONSTITUENT
+    # EPITOPES, which are real predicted sequences; the identity criterion runs
+    # on the consensus, which is synthesised and so may occur in no real
+    # protein. Recorded separately so that a 30%-identity hit, which is at
+    # chance for a 20-30mer, cannot be read as the same kind of evidence as a
+    # literal shared run of residues.
+    "allergen_exact_epitopes",    # constituent epitopes carrying an exact match
+    "allergen_exact_matches",     # window@allergen:offset, truncated
+    "allergen_identity_percent",  # best ungapped identity, consensus vs set
+    "allergen_identity_match",    # which allergen gave it
+    "allergen_homology_risk",     # True if either criterion flagged
     "human_match_count",
     "human_match_peptides",
     "autoimmune_risk",     # True means it matches the human proteome -> fails
@@ -134,6 +156,7 @@ SCREENING = [
 CONSERVANCY = [
     "consensus_id",
     "protein_label",
+    "strain",
     "sequence",
     "n_target_sequences",
     "n_matched",
@@ -141,7 +164,7 @@ CONSERVANCY = [
     "conservancy_percent",
     "min_identity",
     "max_identity",
-    "matched_strains",
+    "matched_accessions",
 ]
 
 # --- stage 8 -----------------------------------------------------------------
@@ -174,8 +197,30 @@ FINAL = [
     "n_strains",
     "antigenicity_score",
     "allergen_score",
+    # The verdict beside the score, because allergenicity is advisory by
+    # default (screening.allergenicity.drop_on_allergen) and a candidate can
+    # now reach this table having been called an allergen. A bare
+    # allergen_score cannot say whether it was: 0.416 is only meaningful
+    # against the threshold that graded it, which lives in config.yaml.
+    # Without this column the final table silently loses the distinction.
+    "allergen",
+    # Carried from stage 6 so the headline table shows the sequence evidence
+    # beside AlgPred's composition score. Anything reaching stage 9 already
+    # passed the exact-match criterion, which is a hard filter; the identity
+    # figure is advisory, and is here to be read rather than acted on - at
+    # 20-30 aa it is at chance. See mpvpredpip.allergen_homology.
+    "allergen_identity_percent",
+    "allergen_homology_risk",
     "human_match_count",
+    # The minimum conservancy across strains bounds a multi-strain claim: 100%
+    # in Zaire and 40% in Sudan means the candidate is a 40% prospect, not a
+    # 100% one.  Per-strain values live in the stage 7 table.
     "conservancy_percent",
+    "conservancy_per_strain",
+    # THIS candidate's own World coverage, class I and II combined, from its
+    # own run of the IEDB tool. Not the whole set's - that figure is the same
+    # for every candidate and so ranks none of them; it is in the stage 8
+    # table under consensus_id "ALL".
     "world_coverage_percent",
     "n_bepipred",
     "n_epidope",

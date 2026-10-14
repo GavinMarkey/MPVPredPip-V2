@@ -1,4 +1,4 @@
-﻿"""Stage 7 - epitope conservancy across the supplied strains.
+"""Stage 7 - epitope conservancy across the supplied strains.
 
 The IEDB conservancy analysis tool is web-only. Its algorithm is simple and fully
 specified, so it is reimplemented here to keep the pipeline unattended, while
@@ -17,6 +17,13 @@ Algorithm, as defined by IEDB:
 Note the difference from the alignment-based view: conservancy is computed on
 ungapped sliding windows, independently of any MSA, so it is unaffected by how
 the alignment in stage 7 was built.
+
+When ``conservation.reference_sets.enabled`` is true, each strain is analysed
+against the corresponding NCBI reference set in ``resources/conservancy/``
+(fetched by ``setup/fetch_ncbi_conservancy.py``), producing one row per
+(consensus, strain).  When disabled, the fallback is the user's own input FASTAs
+from the manifest — which usually means 1 sequence per strain and 100% for
+everything.
 """
 
 from __future__ import annotations
@@ -59,7 +66,9 @@ def analyse(
 ) -> list[dict[str, object]]:
     """Compute conservancy of each ``(peptide_id, sequence)`` across *targets*.
 
-    *targets* are ``(strain_label, protein_sequence)`` pairs.
+    *targets* are ``(label, protein_sequence)`` pairs.  When called with a
+    per-strain reference set the labels are accession IDs; when called with the
+    manifest fallback they are strain names (legacy behaviour).
     """
     rows: list[dict[str, object]] = []
     for peptide_id, peptide in peptides:
@@ -80,7 +89,7 @@ def analyse(
                 "conservancy_percent": round(fraction * 100.0, 2),
                 "min_identity": round(min(values) * 100.0, 2),
                 "max_identity": round(max(values) * 100.0, 2),
-                "matched_strains": "|".join(sorted(matched)),
+                "matched_accessions": "|".join(sorted(matched)),
             }
         )
     return rows
@@ -99,6 +108,26 @@ def deduplicate_records(records: Iterable[fasta_mod.Record]) -> list[fasta_mod.R
     return list(seen.values())
 
 
+def _load_manifest_targets(
+    manifest_path: str,
+    protein_label: str,
+) -> dict[str, list[fasta_mod.Record]]:
+    """Load target sequences from the manifest, grouped by strain.
+
+    Returns ``{strain: [records]}`` so the caller can iterate strains the same
+    way it would iterate reference FASTAs.  This is the fallback when NCBI
+    reference sets are not configured.
+    """
+    by_strain: dict[str, list[fasta_mod.Record]] = {}
+    for row in tables.read_table(manifest_path):
+        if row["protein_label"] != protein_label:
+            continue
+        for record in fasta_mod.read_fasta(row["path"]):
+            record.strain = row["strain"]
+            by_strain.setdefault(row["strain"], []).append(record)
+    return by_strain
+
+
 def run(
     consensus_fasta: str,
     manifest_path: str,
@@ -108,8 +137,14 @@ def run(
     out_epitopes_txt: str,
     threshold: float = 1.0,
     deduplicate: bool = True,
+    reference_fastas: dict[str, str] | None = None,
 ) -> list[dict[str, object]]:
     """Full stage-7 conservancy run for one protein.
+
+    When *reference_fastas* is ``None`` (the default), target sequences come
+    from the manifest — the user's own inputs.  When it is a dict mapping
+    ``{strain_name: fasta_path}``, each strain is analysed against its own
+    NCBI reference set, producing one row per ``(consensus, strain)``.
 
     Also writes the two files the IEDB web tool expects, so a manual cross-check
     needs no reformatting: the non-redundant target FASTA and a plain list of
@@ -117,38 +152,67 @@ def run(
     """
     peptides = [(record.id, record.sequence) for record in fasta_mod.read_fasta(consensus_fasta)]
 
-    targets: list[fasta_mod.Record] = []
-    for row in tables.read_table(manifest_path):
-        if row["protein_label"] != protein_label:
-            continue
-        for record in fasta_mod.read_fasta(row["path"]):
-            record.strain = row["strain"]
-            targets.append(record)
-
-    if deduplicate:
-        before = len(targets)
-        targets = deduplicate_records(targets)
-        if before != len(targets):
-            print(
-                f"[mpvpredpip] conservancy: collapsed {before} -> {len(targets)} "
-                f"non-redundant {protein_label} sequences",
-            )
-
-    fasta_mod.write_fasta(
-        out_targets_fasta,
-        [(f"{record.strain}|{record.accession}", record.sequence) for record in targets],
-    )
+    # Write the epitope list (same regardless of reference mode)
     with open(out_epitopes_txt, "w", encoding="utf-8", newline="\n") as handle:
         for _, sequence in peptides:
             handle.write(sequence + "\n")
 
-    rows = analyse(
-        peptides,
-        [(record.strain, record.sequence) for record in targets],
-        threshold=threshold,
-    )
-    for row in rows:
-        row["protein_label"] = protein_label
+    # --- Build per-strain target sets ----------------------------------------
+    if reference_fastas:
+        # NCBI reference sets — one FASTA per strain, already filtered by the
+        # fetch script.  Deduplication is still applied because the fetch
+        # script's dedupe is by raw sequence, and a record that differs only
+        # in header could appear across merged batches.
+        strain_targets: dict[str, list[fasta_mod.Record]] = {}
+        for strain, fasta_path in sorted(reference_fastas.items()):
+            records = fasta_mod.read_fasta(fasta_path)
+            for r in records:
+                r.strain = strain
+            if deduplicate:
+                before = len(records)
+                records = deduplicate_records(records)
+                if before != len(records):
+                    print(
+                        f"[mpvpredpip] conservancy: collapsed {before} -> "
+                        f"{len(records)} non-redundant {protein_label}/{strain} "
+                        f"reference sequences",
+                    )
+            strain_targets[strain] = records
+    else:
+        # Fallback: the user's own manifest entries
+        by_strain = _load_manifest_targets(manifest_path, protein_label)
+        if deduplicate:
+            for strain, records in by_strain.items():
+                before = len(records)
+                by_strain[strain] = deduplicate_records(records)
+                after = len(by_strain[strain])
+                if before != after:
+                    print(
+                        f"[mpvpredpip] conservancy: collapsed {before} -> "
+                        f"{after} non-redundant {protein_label}/{strain} sequences",
+                    )
+        strain_targets = by_strain
 
-    tables.write_table(out_table, schemas.CONSERVANCY, rows)
-    return rows
+    # --- Write the combined targets FASTA for IEDB cross-check ---------------
+    all_targets: list[fasta_mod.Record] = []
+    for strain in sorted(strain_targets):
+        all_targets.extend(strain_targets[strain])
+
+    fasta_mod.write_fasta(
+        out_targets_fasta,
+        [(f"{record.strain}|{record.accession}", record.sequence) for record in all_targets],
+    )
+
+    # --- Analyse per strain --------------------------------------------------
+    all_rows: list[dict[str, object]] = []
+    for strain in sorted(strain_targets):
+        targets = strain_targets[strain]
+        target_pairs = [(record.accession or record.id, record.sequence) for record in targets]
+        rows = analyse(peptides, target_pairs, threshold=threshold)
+        for row in rows:
+            row["protein_label"] = protein_label
+            row["strain"] = strain
+        all_rows.extend(rows)
+
+    tables.write_table(out_table, schemas.CONSERVANCY, all_rows)
+    return all_rows

@@ -1,4 +1,4 @@
-﻿# Stage 7 conservation analysis.
+# Stage 7 conservation analysis.
 #
 # MAFFT builds the alignment. The remaining packages are what a local ConSurf
 # installation expects (cd-hit for redundancy reduction, Rate4Site for the

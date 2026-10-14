@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Preflight check: report which external tools resolve before a run starts.
 
 Run this after installing the predictors and before the first pipeline run:

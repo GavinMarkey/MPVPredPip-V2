@@ -1,4 +1,4 @@
-﻿"""Shared machinery for external-tool adapters.
+"""Shared machinery for external-tool adapters.
 
 Every third-party predictor in this pipeline is wrapped by an adapter with two
 halves:

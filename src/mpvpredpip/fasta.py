@@ -1,4 +1,4 @@
-﻿"""Minimal FASTA reading and writing plus NCBI defline parsing.
+"""Minimal FASTA reading and writing plus NCBI defline parsing.
 
 Deliberately dependency-free so that every conda environment in the workflow can
 import it, including the ones pinned to old interpreters for legacy predictors.

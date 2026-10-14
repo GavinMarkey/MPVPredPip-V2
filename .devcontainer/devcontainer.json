@@ -1,10 +1,81 @@
 {
   "name": "MPVPredPip - multivalent peptide vaccine prediction pipeline",
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "mpvpredpip",
-  "workspaceFolder": "/workspaces/MPVPredPip",
 
-  // Install the library in editable mode so `import vaxpipe` works from any
+  // Deliberately NOT "dockerComposeFile", though docker-compose.yml sits beside
+  // this file and describes the same container. Compose routes its build through
+  // `docker buildx bake`, and the Dev Containers CLI hands the build a Dockerfile
+  // it generates in the host's temp directory - outside the build context. Recent
+  // buildx gates that behind an entitlement and refuses rather than prompting:
+  //
+  //     additional privileges requested: pass "--allow=fs.read=C:\Users\...\
+  //     devcontainercli\container-features\...\Dockerfile-with-features"
+  //
+  // The build is then impossible to start, with no way to pass --allow through
+  // the extension. Nothing in the project causes it and no `features` are used
+  // here; the temp Dockerfile is generated unconditionally.
+  //
+  // The plain build path below goes through `docker build`, which applies no such
+  // check - verified against the identical out-of-context Dockerfile. So this is
+  // the path VS Code takes, on any host.
+  //
+  // docker-compose.yml remains the entry point for CLI users on Linux, where the
+  // build reads the in-repo Dockerfile from inside the context and never trips
+  // the check. MIRROR: the two files describe one container. Changes to the
+  // image args, mounts, environment, shm size or init below must be made in
+  // both.
+  "build": {
+    "context": "..",
+    "dockerfile": "Dockerfile",
+    "args": {
+      "USERNAME": "vscode",
+      "USER_UID": "1000",
+      "USER_GID": "1000"
+    }
+  },
+
+  // The container path is /workspaces/MPVPredPip regardless of what the clone
+  // directory is called. Without an explicit mount this defaults to
+  // /workspaces/<folder-name>, which for any clone not named exactly
+  // "MPVPredPip" would put the project somewhere PYTHONPATH below does not
+  // point at.
+  "workspaceFolder": "/workspaces/MPVPredPip",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/MPVPredPip,type=bind,consistency=cached",
+
+  // The two volumes that make this worth more than a bare image: Snakemake's
+  // per-rule conda environments (several GB, slow to resolve) and the package
+  // cache shared across their builds. Both must survive an image rebuild.
+  //
+  // The names are spelled out in full, including the compose project prefix, so
+  // that these are the SAME volumes `docker compose` creates from
+  // docker-compose.yml. Dropping the prefix would be a different, empty volume
+  // and Snakemake would silently re-resolve every environment.
+  "mounts": [
+    "source=mpvpredpip_devcontainer_snakemake-conda,target=/opt/snakemake-conda,type=volume",
+    "source=mpvpredpip_devcontainer_conda-pkgs,target=/opt/conda/pkgs,type=volume"
+  ],
+
+  "containerEnv": {
+    // Equivalent to passing --conda-prefix on every invocation, so a plain
+    // `snakemake --use-conda --cores 8` uses the cache volume above.
+    "SNAKEMAKE_CONDA_PREFIX": "/opt/snakemake-conda",
+
+    // Snakemake is the only thing that should be creating conda environments;
+    // keep its resolver quiet and deterministic.
+    "CONDA_ALWAYS_YES": "true",
+    "PYTHONPATH": "/workspaces/MPVPredPip/src"
+  },
+
+  // --init reaps the zombie processes some predictors leave behind. The
+  // deep-learning predictors (BepiPred's ESM-2, EpiDope's TensorFlow) need more
+  // shared memory than Docker's 64 MB default; 2g here is the same 2 GiB as
+  // shm_size in docker-compose.yml.
+  "runArgs": ["--init", "--shm-size=2g"],
+
+  // Replaces compose's `command: sleep infinity` - keep the container alive and
+  // let VS Code attach and open its own shells.
+  "overrideCommand": true,
+
+  // Install the library in editable mode so `import mpvpredpip` works from any
   // working directory, then report which external predictors resolved. The
   // check exits 1 when a licence-gated tool is missing, which is the normal
   // state on a fresh clone - `|| true` keeps that from failing the build.
@@ -17,7 +88,8 @@
         "charliermarsh.ruff",
         "snakemake.snakemake-lang",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "editorconfig.editorconfig"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/opt/conda/envs/mpvpredpip-v2/bin/python",
@@ -38,6 +110,7 @@
   "remoteUser": "vscode",
 
   // Stop the container when the window closes; the named volumes persist, so
-  // the next start does not re-resolve any conda environment.
-  "shutdownAction": "stopCompose"
+  // the next start does not re-resolve any conda environment. "stopContainer"
+  // rather than "stopCompose" now that this is not a compose project.
+  "shutdownAction": "stopContainer"
 }

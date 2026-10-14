@@ -1,0 +1,45 @@
+# VCS and editor data
+.git
+.gitignore
+.vscode
+.idea
+.devcontainer
+
+# Python caches and build artifacts
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+*.egg-info
+build
+dist
+
+# Generated pipeline outputs and local inputs
+1 - Sequence_retrieval
+2 - Antigenicity_prediction
+3 - B-cell_prediction
+4 - T-cell_epitopes
+5 - B_T-cell_consensus
+6 - Antigenicity_Allergenicity_AA_Checks
+7 - Conservation_Analysis
+8 - Population_coverage
+9 - Final_Consensus_Epitopes
+0 - Input
+
+# Large or license-gated predictor downloads
+tools
+resources/human
+
+# Root-level sequence files only. Docker matches these with filepath.Match,
+# where `*` does not cross a `/`, so these patterns catch `big.fasta` at the
+# context root and nothing nested - unlike .gitignore, which would match at any
+# depth. Do NOT "fix" them to `**/*.fasta`: that would strip
+# workflow/allergens_dataset.fasta out of the image, and stage 6's allergen
+# homology screen reads it (screening.allergen_homology in config.yaml). The
+# devcontainer would not notice, because it bind-mounts the project over the
+# image, but a plain `docker build` + `docker run` would fail in stage 6.
+*.fasta
+*.fa
+*.faa
+*.gz
+*.zip

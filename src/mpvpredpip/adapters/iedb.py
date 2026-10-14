@@ -1,4 +1,4 @@
-﻿"""Adapters for the IEDB standalone tools.
+"""Adapters for the IEDB standalone tools.
 
 Covers stages 4, 5 and 8: MHC class I and class II binding prediction, class I
 immunogenicity, epitope cluster analysis and population coverage.
@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 from collections.abc import Sequence
 
 from . import base
@@ -394,12 +395,36 @@ def write_population_input(path: str, entries: Sequence[tuple[str, Sequence[str]
     return path
 
 
-def parse_population_coverage(path: str) -> list[dict[str, object]]:
-    """Parse population-coverage output into ``population``/``coverage`` rows.
+#: Each ``class`` block holds TWO tables, and both headers begin
+#: "population/area" and contain the word "coverage" - the second one through
+#: its ``cumulative_coverage`` column. Matching the header loosely therefore
+#: reads the hit distribution as though it were coverage, which is what put
+#: rows like ``World | 0 | 53.77 | 100`` into the stage 8 table. The second
+#: column name is what actually distinguishes them, so it is matched exactly.
+_COVERAGE_COLUMN = "coverage"
 
-    The tool's output is a short human-readable report rather than a clean table,
-    so this is a line scanner: it looks for the section header and then reads
-    whitespace- or tab-separated rows until the block ends.
+#: Written after the per-population rows. These are summaries *across* the
+#: requested populations, not populations, and were previously emitted as rows
+#: named "average" and "standard_deviation".
+_SUMMARY_ROWS = frozenset({"average", "standard_deviation"})
+
+
+def parse_population_coverage(path: str) -> list[dict[str, object]]:
+    """Parse the coverage summary out of the tool's report.
+
+    Returns one row per *(population, MHC class)*: ``population``,
+    ``mhc_class`` (``I``, ``II`` or ``combined``), ``coverage_percent``,
+    ``average_hit`` and ``pc90``.
+
+    The report is a sequence of ``class <X>`` blocks, one per requested class,
+    repeated for each requested population. Within a block come a coverage
+    table and then a hit-distribution table. The class heading and which of the
+    two tables is in scope are both tracked explicitly, because neither can be
+    recovered from a row on its own.
+
+    A class block is **absent** when none of the submitted alleles belong to
+    that class - the tool does not emit a zero. Callers must read a missing
+    class as "no alleles of this class", not as no coverage.
     """
     if not os.path.exists(path):
         raise base.ToolError(f"Population coverage output not found: {path}")
@@ -408,33 +433,39 @@ def parse_population_coverage(path: str) -> list[dict[str, object]]:
     with open(path, encoding="utf-8-sig", errors="replace") as handle:
         lines = [line.rstrip("\n") for line in handle]
 
-    in_table = False
+    mhc_class = ""
+    in_coverage_table = False
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            in_table = False
+            in_coverage_table = False
             continue
 
         lowered = stripped.lower()
-        if lowered.startswith("population") and "coverage" in lowered:
-            in_table = True
-            continue
-        if not in_table:
-            continue
-
-        parts = [part.strip() for part in (stripped.split("\t") if "\t" in stripped else stripped.split("  ")) if part.strip()]
-        if len(parts) < 2:
+        if lowered.startswith("class "):
+            mhc_class = stripped[len("class "):].strip()
+            in_coverage_table = False
             continue
 
-        coverage = parts[1].replace("%", "").strip()
+        parts = _split_report_row(stripped)
+        if lowered.startswith("population"):
+            in_coverage_table = len(parts) > 1 and parts[1].lower() == _COVERAGE_COLUMN
+            continue
+
+        if not in_coverage_table or len(parts) < 2:
+            continue
+        if parts[0].lower() in _SUMMARY_ROWS:
+            continue
+
         try:
-            coverage_value = float(coverage)
+            coverage_value = float(parts[1].replace("%", "").strip())
         except ValueError:
             continue
 
         rows.append(
             {
                 "population": parts[0],
+                "mhc_class": mhc_class,
                 "coverage_percent": coverage_value,
                 "average_hit": base.to_float(parts[2], "average hit") if len(parts) > 2 and _numeric(parts[2]) else "",
                 "pc90": base.to_float(parts[3], "pc90") if len(parts) > 3 and _numeric(parts[3]) else "",
@@ -448,6 +479,17 @@ def parse_population_coverage(path: str) -> list[dict[str, object]]:
             "parse_population_coverage() in src/mpvpredpip/adapters/iedb.py."
         )
     return rows
+
+
+def _split_report_row(line: str) -> list[str]:
+    """Split a report row into fields.
+
+    Tab-separated in every release seen, but the fallback splits on runs of two
+    or more spaces rather than on whitespace: population names contain single
+    spaces ("East Africa", "North America") and would otherwise be torn apart.
+    """
+    fields = line.split("\t") if "\t" in line else re.split(r"\s{2,}", line)
+    return [field.strip() for field in fields if field.strip()]
 
 
 def _numeric(text: str) -> bool:

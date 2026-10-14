@@ -1,4 +1,4 @@
-﻿# Stage 1 - sequence retrieval, validation and normalisation.
+# Stage 1 - sequence retrieval, validation and normalisation.
 #
 # The user supplies NCBI protein FASTA files in "0 - Input" (sequences.input_dir
 # in config.yaml) - a folder this pipeline only ever reads, which is why the

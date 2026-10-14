@@ -1,9 +1,14 @@
-﻿# Stage 6 - antigenicity, allergenicity and autoimmunity screening.
+# Stage 6 - antigenicity, allergenicity and autoimmunity screening.
 #
 # Applied to the consensus peptides that passed stage 5. Unlike stage 2, these
-# are hard filters: a peptide must be predicted antigenic, must not be predicted
-# allergenic, and must not share an exact window of
-# screening.autoimmunity.min_exact_match_length residues with the human proteome.
+# are mostly hard filters: a peptide must be predicted antigenic and must not
+# share an exact window of screening.autoimmunity.min_exact_match_length
+# residues with the human proteome.
+#
+# Allergenicity is recorded but advisory by default - AlgPred's hybrid collapses
+# to composition alone at this peptide length, so the call is too weak to drop
+# on. screening.allergenicity.drop_on_allergen in config.yaml turns it back into
+# a hard filter.
 #
 # The autoimmunity check is done in-process by mpvpredpip.autoimmunity rather than
 # by the PIR Peptide Match standalone. That tool is free but publishes no built
@@ -55,12 +60,30 @@ def _allergenicity_input(wildcards):
     return f"{S6}/{wildcards.protein}/raw/allergenicity.csv"
 
 
+def _allergen_homology_input(wildcards):
+    """The allergen FASTA, or nothing when the homology screen is off.
+
+    A plain input rather than a params string so that Snakemake reruns stage 6
+    when the allergen set itself changes - the screen's verdicts are a function
+    of that file's contents, not just of its path.
+    """
+    homology = config["screening"].get("allergen_homology", {})
+    if not homology.get("enabled", False):
+        return []
+    return homology["allergens"]
+
+
 rule screen_consensus:
     input:
         fasta=f"{S5}/{{protein}}/passing_consensus.fasta",
         clusters=f"{S5}/{{protein}}/clusters.tsv",
+        # The constituent epitopes of each cluster. Needed because the allergen
+        # exact-match criterion runs on them rather than on the synthesised
+        # consensus - see screening.allergen_homology in config.yaml.
+        members=f"{S5}/{{protein}}/cluster_members.tsv",
         proteome=config["screening"]["autoimmunity"]["human_proteome"],
         allergenicity=_allergenicity_input,
+        allergens=_allergen_homology_input,
     output:
         table=f"{S6}/{{protein}}/screening.tsv",
         passed=f"{S6}/{{protein}}/passed.fasta",
@@ -71,6 +94,7 @@ rule screen_consensus:
         antigenicity_command=config["antigenicity"].get("command", ""),
         antigenicity_dir=config["tools"]["antigenicity"],
         allergenicity=config["screening"]["allergenicity"],
+        allergen_homology=config["screening"].get("allergen_homology", {}),
         autoimmunity=config["screening"]["autoimmunity"],
         raw_dir=f"{S6}/{{protein}}/raw",
     log:

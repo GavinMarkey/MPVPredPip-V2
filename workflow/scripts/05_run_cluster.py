@@ -1,4 +1,4 @@
-﻿"""Stage 5 - cluster the pooled epitopes and build each cluster's consensus.
+"""Stage 5 - cluster the pooled epitopes and build each cluster's consensus.
 
 This no longer runs the IEDB cluster standalone. That tool only groups peptides -
 it emits no consensus sequence and no alignment, is Python 2 source, and its CLI

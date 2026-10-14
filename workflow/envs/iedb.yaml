@@ -1,4 +1,4 @@
-﻿# IEDB standalone tools: MHC-I and MHC-II binding, immunogenicity, epitope
+# IEDB standalone tools: MHC-I and MHC-II binding, immunogenicity, epitope
 # clustering and population coverage.
 #
 # The IEDB standalones are conservative about their interpreter: several ship
@@ -39,10 +39,26 @@ dependencies:
   # mhci-netmhcpan-4.1-el-percentile-data, which is exactly what the
   # netmhcpan_el method configured in config.yaml uses. pkg_resources ships with
   # setuptools, which recent Python no longer bundles and which nothing else
-  # here pulls in.
+  # here pulls in. population_coverage does the same thing in
+  # population_coverage_pickle/__init__.py, which is how stage 8 ends up on the
+  # same dependency as stage 4.
   #
   # Without it every prediction fails with ModuleNotFoundError: No module named
   # 'pkg_resources'. That is how mhc_ii's own test suite fails during
   # `python configure.py`, so run that after building this environment if you
   # want the tools to self-check.
-  - setuptools
+  #
+  # The <81 upper bound carries as much weight as the dependency itself, and for
+  # the same reason: setuptools has removed pkg_resources outright, not merely
+  # deprecated it. Confirmed directly - setuptools 84.0.0 contains no
+  # pkg_resources module at all, and installing setuptools<81 brings it back.
+  # So leaving this unbounded is a time bomb rather than a style complaint: a
+  # bare `setuptools` satisfies the resolver while failing to supply the one
+  # module it was added for. Environments that already exist keep working only
+  # because they were resolved while setuptools still shipped pkg_resources;
+  # the breakage lands on the next fresh resolve, and then it takes out stages 4
+  # and 8 together with the ModuleNotFoundError above. Relax the bound only once
+  # the vendored tools stop importing pkg_resources - those imports belong to
+  # the IEDB release, not to this pipeline, so that is a question about the
+  # tools rather than about this file.
+  - setuptools<81

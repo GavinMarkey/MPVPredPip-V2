@@ -1,4 +1,4 @@
-﻿"""Tests for the pipeline logic that does not depend on any external tool.
+"""Tests for the pipeline logic that does not depend on any external tool.
 
 Run with:
 
@@ -18,9 +18,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from mpvpredpip import algpred, autoimmunity, inputs  # noqa: E402
+from mpvpredpip import algpred, autoimmunity, conservancy, epitopes, fasta, inputs, tables  # noqa: E402  # noqa: E402
 from mpvpredpip import cluster as cluster_mod  # noqa: E402
-from mpvpredpip import conservancy, epitopes, fasta, tables  # noqa: E402
 from mpvpredpip import manifest as manifest_mod  # noqa: E402
 from mpvpredpip.adapters import bcell, iedb, screening  # noqa: E402
 
@@ -443,7 +442,7 @@ class TestConservancy:
         )
         assert rows[0]["n_matched"] == 2
         assert rows[0]["conservancy_percent"] == pytest.approx(66.67, abs=0.01)
-        assert rows[0]["matched_strains"] == "Sudan|Zaire"
+        assert rows[0]["matched_accessions"] == "Sudan|Zaire"
 
     def test_deduplicate_collapses_identical_sequences(self):
         records = [
@@ -728,6 +727,27 @@ class TestAlgPredSetup:
         workdir.mkdir()
         with pytest.raises(algpred.AlgPredError, match="blastp"):
             algpred.write_envfile(str(workdir), root)
+
+    def test_envfile_refuses_a_path_the_parser_would_truncate(self, tmp_path, monkeypatch):
+        """A colon in a path is silent data loss, so it has to be an error.
+
+        ``split(':')[1]`` stops at the next colon, so a Windows ``blastp``
+        reaches AlgPred as ``C``. BLAST never runs, the empty output file it
+        leaves reads as "no hits", and ``-m 2`` reports the composition
+        model's score as a hybrid one - no error anywhere. AlgPred's own three
+        paths are written relative to the run directory to avoid this; blastp
+        comes from PATH and cannot be, so it is refused instead.
+        """
+        monkeypatch.setattr(
+            algpred.shutil, "which",
+            lambda name: r"C:\tools\blast\bin\blastp.exe",
+        )
+        root = self._install(tmp_path)
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        with pytest.raises(algpred.AlgPredError, match="colon"):
+            algpred.write_envfile(str(workdir), root)
+        assert not (workdir / "envfile").exists()   # nothing half-written
 
     def test_sklearn_externals_import_is_patched(self, tmp_path):
         """AlgPred will not even start under modern scikit-learn without this.
@@ -1224,10 +1244,35 @@ class TestClusterPeptides:
         entries = [("a", "PHDWTKNITDKIDQ"), ("b", "PHDWTKNITDKIDA")]
         assert len(cluster_mod.cluster_peptides(entries, threshold=100.0 * 13 / 14)) == 1
 
-    def test_member_order_follows_input(self):
+    def test_members_at_one_position_keep_input_order(self):
+        # Both start at position 1, so the position sort must not disturb them:
+        # the tie-break is the order the stage 3/4 tables gave.
         entries = [("first", "PHDWTKNITDKIDQ"), ("second", "PHDWTKNITDKIDA")]
         clusters = cluster_mod.cluster_peptides(entries, threshold=60)
         assert [m.description for m in clusters[0].members] == ["first", "second"]
+
+    def test_members_are_ordered_by_position(self):
+        # Short peptides sitting at different offsets inside one long peptide.
+        # They must differ in LENGTH to cluster at all: percent_identity slides
+        # the shorter along the longer, so two equal-length peptides are only
+        # ever compared at offset 0 and score 0 however much they overlap.
+        #
+        # Fed in back to front, so an implementation that preserved input order
+        # would emit 7, 4, 1, 1 and fail here.
+        entries = [
+            ("at_7", "HIKLMNPQ"),
+            ("at_4", "EFGHIKLM"),
+            ("whole", "ACDEFGHIKLMNPQRSTVWY"),
+            ("at_1", "ACDEFGHI"),
+        ]
+        clusters = cluster_mod.cluster_peptides(entries, threshold=60)
+        assert len(clusters) == 1
+        positions = [int(m.position) for m in clusters[0].members]
+        assert positions == [1, 1, 4, 7]
+        # member_index numbers the rows as they appear, after the sort.
+        assert [m.member_index for m in clusters[0].members] == ["1", "2", "3", "4"]
+        # The two at position 1 keep the order they were given in.
+        assert [m.description for m in clusters[0].members][:2] == ["whole", "at_1"]
 
 
 class TestBuildConsensus:
@@ -1899,3 +1944,471 @@ class TestInputFolder:
         # must fall on opposite sides of it.
         assert rows[0]["antigenic"] is True
         assert rows[1]["antigenic"] is False
+
+
+def _strain_cluster(strains_per_member: list[str]) -> cluster_mod.Cluster:
+    """A cluster that satisfies the composition rule, varying only its strains.
+
+    One member per predictor, so the only thing that can fail is the strain
+    requirement under test.
+    """
+    tools = ["bepipred", "epidope", "mhc_i", "mhc_ii"]
+    cluster = cluster_mod.Cluster(cluster_id="1.1", consensus="ACDEFGHIK")
+    for index, (tool, strains) in enumerate(zip(tools, strains_per_member), start=1):
+        cluster.members.append(
+            cluster_mod.Member(
+                cluster_id="1.1",
+                member_index=str(index),
+                alignment="ACDEFGHIK",
+                position="1",
+                description=f"epitope_{index}",
+                sequence="ACDEFGHIK",
+                source_tool=tool,
+                epitope_class="B",
+                strains=strains,
+            )
+        )
+    return cluster
+
+
+ALL_THREE = ["Bundibugyo_virus", "Sudan_ebolavirus", "Zaire_ebolavirus", "Zaire_ebolavirus"]
+TWO_ONLY = ["Bundibugyo_virus", "Bundibugyo_virus", "Zaire_ebolavirus", "Zaire_ebolavirus"]
+
+
+class TestStrainRequirement:
+    def test_cluster_spanning_every_strain_passes(self):
+        require = dict(REQUIRE, min_strains=3)
+        passes, reason, _ = cluster_mod.evaluate(_strain_cluster(ALL_THREE), require)
+        assert passes, reason
+
+    def test_cluster_missing_a_strain_is_rejected(self):
+        require = dict(REQUIRE, min_strains=3)
+        passes, reason, _ = cluster_mod.evaluate(_strain_cluster(TWO_ONLY), require)
+        assert not passes
+        assert "2 strain(s)" in reason and "needs 3" in reason
+
+    def test_requirement_is_off_by_default(self):
+        # A config written before min_strains existed must behave as it did.
+        passes, reason, _ = cluster_mod.evaluate(_strain_cluster(TWO_ONLY), REQUIRE)
+        assert passes, reason
+
+    def test_zero_disables_the_check(self):
+        require = dict(REQUIRE, min_strains=0)
+        passes, reason, _ = cluster_mod.evaluate(_strain_cluster(TWO_ONLY), require)
+        assert passes, reason
+
+    def test_a_member_covering_several_strains_counts_for_each(self):
+        # Deduplication collapses one peptide found in three strains into a
+        # single clustering input carrying all three, which must still satisfy
+        # the requirement on its own.
+        shared = ["Bundibugyo_virus|Sudan_ebolavirus|Zaire_ebolavirus"] * 4
+        require = dict(REQUIRE, min_strains=3)
+        passes, reason, _ = cluster_mod.evaluate(_strain_cluster(shared), require)
+        assert passes, reason
+
+
+class TestConsensusRowInMembers:
+    def _members(self, tmp_path):
+        cluster_csv = tmp_path / "cluster.csv"
+        cluster_csv.write_text(CLUSTER_CSV, encoding="utf-8")
+        return cluster_mod.select_at_threshold(
+            cluster_path=str(cluster_csv),
+            epitope_rows=EPITOPE_ROWS,
+            protein_label="Spike",
+            threshold=80,
+            require=REQUIRE,
+        ).member_rows
+
+    def test_each_cluster_opens_with_its_consensus(self, tmp_path):
+        rows = self._members(tmp_path)
+
+        consensus_rows = [r for r in rows if r["member_index"] == "Consensus"]
+        # Two, not three: 3.1's consensus carries an X and the cluster is
+        # discarded before any row is built for it.
+        assert len(consensus_rows) == 2, "one per surviving cluster"
+
+        # The consensus heads its own block, before any of its members.
+        first = rows[0]
+        assert first["cluster_id"] == "1.1"
+        assert first["member_index"] == "Consensus"
+        assert first["alignment"] == "ACDEFGHIKLMNPQRST"
+        assert first["sequence"] == "ACDEFGHIKLMNPQRST"
+
+        # It is a reference row, not an epitope: stages 8 and 9 join on
+        # epitope_id, and "-" matches nothing there.
+        assert first["epitope_id"] == "-"
+        assert first["position"] == "-"
+
+    def test_members_follow_their_consensus_in_position_order(self, tmp_path):
+        rows = self._members(tmp_path)
+        block = [r for r in rows if r["cluster_id"] == "1.1"]
+        assert block[0]["member_index"] == "Consensus"
+        positions = [int(r["position"]) for r in block[1:]]
+        assert positions == sorted(positions)
+
+
+def _member(position: int, sequence: str, tool: str = "bepipred", consensus_len: int = 25):
+    """A member padded to the consensus width, as build_consensus would leave it."""
+    lead = position - 1
+    return cluster_mod.Member(
+        cluster_id="1.1",
+        member_index="1",
+        alignment="-" * lead + sequence + "-" * (consensus_len - lead - len(sequence)),
+        position=str(position),
+        description=f"{tool}_{position}",
+        sequence=sequence,
+        source_tool=tool,
+        epitope_class="B",
+        strains="Zaire_ebolavirus",
+    )
+
+
+class TestConsensusMatchPruning:
+    # The real case: cluster 32.1 of the Ebola spike run. Majority voting put S at
+    # position 10 where several members carry A, so those members do not contain
+    # the consensus they are filed under.
+    CONSENSUS = "TDVPTATKRWGFRSGVPPKVVNYEA"
+
+    def _cluster(self, members):
+        cluster = cluster_mod.Cluster(cluster_id="1.1", consensus=self.CONSENSUS)
+        cluster.members = members
+        return cluster
+
+    def test_exact_member_is_kept(self):
+        member = _member(1, "TDVPTATKRWGFRS")
+        cluster = self._cluster([member])
+        assert cluster_mod.member_matches_consensus(cluster, member)
+        assert cluster_mod.prune_to_consensus(cluster) == []
+        assert cluster.members == [member]
+
+    def test_outvoted_member_is_dropped(self):
+        # ...GFRA vs the consensus's ...GFRS at position 14.
+        member = _member(1, "TDVPTATKRWGFRA")
+        cluster = self._cluster([member])
+        assert not cluster_mod.member_matches_consensus(cluster, member)
+        dropped = cluster_mod.prune_to_consensus(cluster)
+        assert dropped == [member]
+        assert cluster.members == []
+
+    def test_mismatch_anywhere_in_the_member_counts(self):
+        # First residue differs; the rest is a perfect match.
+        member = _member(5, "SATKRWGFRSGVPP")
+        cluster = self._cluster([member])
+        assert not cluster_mod.member_matches_consensus(cluster, member)
+
+    def test_member_running_past_the_consensus_end_is_dropped(self):
+        member = _member(20, "VNYEAWWWWWW")
+        cluster = self._cluster([member])
+        assert not cluster_mod.member_matches_consensus(cluster, member)
+
+    def test_unreadable_position_is_a_mismatch_not_a_crash(self):
+        member = _member(1, "TDVPTATKRWGFRS")
+        member.position = "-"
+        cluster = self._cluster([member])
+        assert not cluster_mod.member_matches_consensus(cluster, member)
+
+    def test_survivors_leave_no_disagreement(self):
+        # The invariant the whole check buys: once every member matches the
+        # consensus, no column can hold two different residues.
+        cluster = self._cluster([
+            _member(1, "TDVPTATKRWGFRA"),       # outvoted, dropped
+            _member(1, "TDVPTATKRWGFRS"),       # exact
+            _member(5, "TATKRWGFRSGVPP"),       # exact
+            _member(5, "SATKRWGFRSGVPP"),       # outvoted, dropped
+        ])
+        dropped = cluster_mod.prune_to_consensus(cluster)
+        assert len(dropped) == 2
+        assert len(cluster.members) == 2
+        assert cluster_mod.disagreeing_positions(cluster) == 0
+
+    def test_consensus_is_not_rebuilt_from_survivors(self):
+        cluster = self._cluster([_member(1, "TDVPTATKRWGFRA")])
+        cluster_mod.prune_to_consensus(cluster)
+        assert cluster.members == []
+        assert cluster.consensus == self.CONSENSUS
+
+    def test_counts_are_taken_after_pruning(self):
+        # A cluster that looks complete only because of members that do not match
+        # its consensus must not pass.
+        cluster = self._cluster([
+            _member(1, "TDVPTATKRWGFRS", tool="bepipred"),   # exact
+            _member(1, "TDVPTATKRWGFRA", tool="epidope"),    # outvoted
+            _member(5, "SATKRWGFR", tool="mhc_i"),           # outvoted
+            _member(5, "TATKRWGFRSGVPPK", tool="mhc_ii"),    # exact
+        ])
+        assert cluster_mod.evaluate(cluster, REQUIRE)[0], "complete before pruning"
+        cluster_mod.prune_to_consensus(cluster)
+        passes, reason, _ = cluster_mod.evaluate(cluster, REQUIRE)
+        assert not passes
+        assert "EpiDope" in reason and "MHC-I" in reason
+
+
+# ---------------------------------------------------------------------------
+# population coverage (stage 8)
+# ---------------------------------------------------------------------------
+# The IEDB report puts two tables inside every "class" block, and both headers
+# begin "population/area" and contain the word "coverage" - the second through
+# its cumulative_coverage column. The parser used to take the first header it
+# saw and then read everything after it, so the hit distribution was recorded
+# as coverage figures, the "average" and "standard_deviation" summary lines
+# became populations, and class I and class II results were indistinguishable.
+# Every number stage 8 produced was therefore wrong. These tests are written
+# against a verbatim excerpt of a real report.
+
+_REAL_REPORT = """\
+class I
+population/area\tcoverage\taverage_hit\tpc90
+World\t11.53%\t0.12\t0.11
+average\t11.53%\t0.12\t0.11
+standard_deviation\t0.0%\t0.0\t0.0
+
+population/area\tepitope_hits\tpercent_individuals\tcumulative_coverage
+World\t0\t88.47\t100.0
+World\t1\t11.3\t11.53
+
+class II
+population/area\tcoverage\taverage_hit\tpc90
+World\t70.83%\t1.0\t0.34
+average\t70.83%\t1.0\t0.34
+standard_deviation\t0.0%\t0.0\t0.0
+
+population/area\tepitope_hits\tpercent_individuals\tcumulative_coverage
+World\t0\t29.17\t100.0
+
+class combined
+population/area\tcoverage\taverage_hit\tpc90
+World\t74.19%\t1.12\t0.39
+average\t74.19%\t1.12\t0.39
+standard_deviation\t0.0%\t0.0\t0.0
+
+population/area\tepitope_hits\tpercent_individuals\tcumulative_coverage
+World\t0\t25.81\t100.0
+"""
+
+
+class TestPopulationCoverageParsing:
+    def _parse(self, tmp_path, text):
+        path = tmp_path / "report.txt"
+        path.write_text(text, encoding="utf-8")
+        return iedb.parse_population_coverage(str(path))
+
+    def test_one_row_per_population_and_class(self, tmp_path):
+        rows = self._parse(tmp_path, _REAL_REPORT)
+        assert [(r["population"], r["mhc_class"]) for r in rows] == [
+            ("World", "I"), ("World", "II"), ("World", "combined")
+        ]
+
+    def test_the_combined_figure_is_reported(self, tmp_path):
+        """74.19% is what the IEDB web tool shows for this input."""
+        rows = self._parse(tmp_path, _REAL_REPORT)
+        combined = [r for r in rows if r["mhc_class"] == "combined"]
+        assert len(combined) == 1
+        assert combined[0]["coverage_percent"] == pytest.approx(74.19)
+        assert combined[0]["average_hit"] == pytest.approx(1.12)
+        assert combined[0]["pc90"] == pytest.approx(0.39)
+
+    def test_classes_are_not_conflated(self, tmp_path):
+        by_class = {r["mhc_class"]: r["coverage_percent"] for r in self._parse(tmp_path, _REAL_REPORT)}
+        assert by_class["I"] == pytest.approx(11.53)
+        assert by_class["II"] == pytest.approx(70.83)
+
+    def test_hit_distribution_is_not_read_as_coverage(self, tmp_path):
+        """The second table's rows must not appear at all.
+
+        Its first data row is "World 0 88.47 100.0", which the old parser
+        stored as coverage=0, average_hit=88.47, pc90=100.
+        """
+        rows = self._parse(tmp_path, _REAL_REPORT)
+        assert all(r["coverage_percent"] != 0 for r in rows)
+        assert all(r["pc90"] != 100.0 for r in rows)
+
+    def test_summary_lines_are_not_populations(self, tmp_path):
+        names = {r["population"] for r in self._parse(tmp_path, _REAL_REPORT)}
+        assert names == {"World"}
+
+    def test_population_names_containing_spaces_survive(self, tmp_path):
+        """A whitespace split would turn "East Africa" into "East"."""
+        rows = self._parse(
+            tmp_path,
+            "class combined\n"
+            "population/area\tcoverage\taverage_hit\tpc90\n"
+            "East Africa\t85.05%\t1.35\t0.67\n"
+            "North America\t77.0%\t1.2\t0.5\n",
+        )
+        assert [r["population"] for r in rows] == ["East Africa", "North America"]
+
+    def test_space_aligned_report_still_parses(self, tmp_path):
+        """The tab fallback splits on runs of 2+ spaces, not single ones."""
+        rows = self._parse(
+            tmp_path,
+            "class combined\n"
+            "population/area   coverage   average_hit   pc90\n"
+            "East Africa       85.05%     1.35          0.67\n",
+        )
+        assert rows[0]["population"] == "East Africa"
+        assert rows[0]["coverage_percent"] == pytest.approx(85.05)
+
+    def test_a_class_with_no_alleles_is_absent_not_zero(self, tmp_path):
+        """The tool omits the block entirely; it must not become 0% coverage.
+
+        A peptide bound only by class II alleles produces no class I block.
+        Reporting 0 there would claim the peptide was tested against class I
+        and failed, rather than that no class I allele was submitted.
+        """
+        rows = self._parse(
+            tmp_path,
+            "class II\n"
+            "population/area\tcoverage\taverage_hit\tpc90\n"
+            "World\t27.97%\t0.29\t0.14\n"
+            "\n"
+            "class combined\n"
+            "population/area\tcoverage\taverage_hit\tpc90\n"
+            "World\t27.97%\t0.29\t0.14\n",
+        )
+        assert {r["mhc_class"] for r in rows} == {"II", "combined"}
+
+    def test_an_unparseable_report_is_an_error_not_an_empty_table(self, tmp_path):
+        with pytest.raises(iedb.base.ToolError, match="Could not parse"):
+            self._parse(tmp_path, "the tool printed something else entirely\n")
+
+
+# ---------------------------------------------------------------------------
+# stage 5 threshold sweep
+# ---------------------------------------------------------------------------
+
+
+class TestThresholdSweep:
+    def test_a_range_descends_in_tens(self):
+        assert cluster_mod.parse_threshold_sweep("90:50") == [90, 80, 70, 60, 50]
+
+    def test_tightest_first(self):
+        """pool_passing keeps the first match, so order decides attribution."""
+        sweep = cluster_mod.parse_threshold_sweep("90:50")
+        assert sweep == sorted(sweep, reverse=True)
+
+    def test_a_single_number_is_still_one_threshold(self):
+        """A config written before the sweep existed must behave as it did."""
+        assert cluster_mod.parse_threshold_sweep(60) == [60]
+        assert cluster_mod.parse_threshold_sweep("60") == [60]
+
+    def test_the_minimum_is_always_included(self):
+        """The step must not overshoot the floor the user asked for."""
+        assert cluster_mod.parse_threshold_sweep("90:55") == [90, 80, 70, 60, 55]
+
+    def test_a_range_shorter_than_one_step(self):
+        assert cluster_mod.parse_threshold_sweep("90:85") == [90, 85]
+
+    def test_equal_bounds_are_one_threshold(self):
+        assert cluster_mod.parse_threshold_sweep("70:70") == [70]
+
+    def test_a_backwards_range_is_rejected(self):
+        """"50:90" reads as a range but would sweep loose-to-tight."""
+        with pytest.raises(ValueError, match="runs backwards"):
+            cluster_mod.parse_threshold_sweep("50:90")
+
+    def test_a_fraction_is_rejected(self):
+        """0.6 is the pre-2026 fraction; it would cluster everything together."""
+        with pytest.raises(ValueError, match="PERCENTAGE"):
+            cluster_mod.parse_threshold_sweep("0.6")
+        with pytest.raises(ValueError, match="PERCENTAGE"):
+            cluster_mod.parse_threshold_sweep("0.9:0.5")
+
+    def test_nonsense_is_rejected(self):
+        with pytest.raises(ValueError, match="not a number"):
+            cluster_mod.parse_threshold_sweep("tight:loose")
+        with pytest.raises(ValueError, match="not a range"):
+            cluster_mod.parse_threshold_sweep("90:70:50")
+
+
+class TestAmbiguousClustersAreDropped:
+    """Cluster 3.1 of CLUSTER_CSV satisfies the composition rule completely and
+    fails only on the X in its consensus. It is the case that distinguishes
+    "discarded" from "listed as a failure"."""
+
+    def _run(self, tmp_path, threshold=90, reject_ambiguous=True):
+        path = tmp_path / "cluster.csv"
+        path.write_text(CLUSTER_CSV, encoding="utf-8")
+        return cluster_mod.select_at_threshold(
+            cluster_path=str(path),
+            epitope_rows=EPITOPE_ROWS,
+            protein_label="Spike",
+            threshold=threshold,
+            require=REQUIRE,
+            reject_ambiguous=reject_ambiguous,
+        )
+
+    def test_no_cluster_row_is_emitted_for_it(self, tmp_path):
+        result = self._run(tmp_path)
+        assert [row["cluster_id"] for row in result.cluster_rows] == ["1.1", "2.1"]
+
+    def test_no_member_rows_are_emitted_for_it(self, tmp_path):
+        """The whole block goes, not just the consensus line."""
+        result = self._run(tmp_path)
+        assert all(row["cluster_id"] != "3.1" for row in result.member_rows)
+
+    def test_it_is_counted_not_silently_lost(self, tmp_path):
+        result = self._run(tmp_path)
+        assert result.n_found == 3
+        assert result.n_ambiguous == 1
+        assert result.n_examined == 2
+
+    def test_it_does_not_appear_as_a_rejection_reason(self, tmp_path):
+        """It is discarded, so it must not also inflate the rejection counts."""
+        result = self._run(tmp_path)
+        assert not any("ambiguous" in reason for reason in result.reasons)
+
+    def test_disabling_the_check_keeps_and_passes_it(self, tmp_path):
+        """Confirms the cluster is complete, so the drop is the X and nothing else."""
+        result = self._run(tmp_path, reject_ambiguous=False)
+        assert result.n_ambiguous == 0
+        assert "3.1" in [row["cluster_id"] for row in result.cluster_rows]
+        assert "YYYYXYYYYYYY" in [sequence for _, sequence in result.passing]
+
+
+class TestSweepPooling:
+    def _result(self, tmp_path, threshold):
+        path = tmp_path / f"cluster_{threshold}.csv"
+        path.write_text(CLUSTER_CSV, encoding="utf-8")
+        return cluster_mod.select_at_threshold(
+            cluster_path=str(path),
+            epitope_rows=EPITOPE_ROWS,
+            protein_label="Spike",
+            threshold=threshold,
+            require=REQUIRE,
+        )
+
+    def test_consensus_ids_carry_the_threshold(self, tmp_path):
+        """Cluster ids restart per threshold, so without this two different
+        peptides would both be called Spike_Consensus_1.1 and stages 6-9 would
+        join them together."""
+        ids_90 = [row["consensus_id"] for row in self._result(tmp_path, 90).cluster_rows]
+        ids_50 = [row["consensus_id"] for row in self._result(tmp_path, 50).cluster_rows]
+        assert "Spike_Consensus_90_1.1" in ids_90
+        assert "Spike_Consensus_50_1.1" in ids_50
+        assert not set(ids_90) & set(ids_50)
+
+    def test_the_threshold_is_recorded_on_every_row(self, tmp_path):
+        result = self._result(tmp_path, 70)
+        assert {row["threshold"] for row in result.cluster_rows} == {70}
+        assert {row["threshold"] for row in result.member_rows} == {70}
+
+    def test_a_repeated_peptide_is_screened_once(self, tmp_path):
+        """The same input at every threshold stands in for the real case: a
+        peptide that passes at 90% usually passes again all the way down."""
+        results = [self._result(tmp_path, t) for t in (90, 80, 70)]
+        entries, duplicates = cluster_mod.pool_passing(results)
+        assert [sequence for _, sequence in entries] == ["ACDEFGHIKLMNPQRST"]
+        assert duplicates == 2
+
+    def test_the_survivor_is_attributed_to_the_tightest_threshold(self, tmp_path):
+        results = [self._result(tmp_path, t) for t in (90, 80, 70)]
+        entries, _ = cluster_mod.pool_passing(results)
+        assert entries[0][0] == "Spike_Consensus_90_1.1"
+
+    def test_distinct_peptides_are_all_kept(self, tmp_path):
+        first = self._result(tmp_path, 90)
+        second = self._result(tmp_path, 80)
+        second.passing.append(("Spike_Consensus_80_9.9", "MMMMMMMMMM"))
+        entries, duplicates = cluster_mod.pool_passing([first, second])
+        assert len(entries) == 2
+        assert duplicates == 1

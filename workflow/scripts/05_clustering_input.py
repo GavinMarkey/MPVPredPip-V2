@@ -1,4 +1,4 @@
-﻿"""Stage 5 - assemble and deduplicate the clustering input.
+"""Stage 5 - assemble and deduplicate the clustering input.
 
 Pools the B-cell and T-cell epitopes for one protein. Identical peptides from the
 *same* predictor collapse into one clustering entry; identical peptides from

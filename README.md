@@ -1,8 +1,8 @@
-﻿# MPVPredPip v2.0 — Multivalent Peptide-based Vaccine Prediction Pipeline
+# MPVPredPip v2.0 — Multivalent Peptide-based Vaccine Prediction Pipeline
 
-An automated, reproducible pipeline for predicting multivalent peptide-based vaccine candidates. Everything runs offline in a containerized Linux environment. Each stage writes its output into a numbered folder, and the output of each stage is the documented input of the next — so any stage can be inspected, re-run, or replaced independently.
+An automated, reproducible pipeline for predicting multivalent peptide-based vaccine candidates. Everything runs offline in a containerized Linux environment. Each stage writes its output into a numbered folder, and the output of each stage is the documented input of the next so each stage to be inspected, re-run, or replaced independently.
 
-Originally developed for **Ebola** virus strains, now generalized for any pathogen protein sequences.
+Originally developed for **HBoV** virus strains, now generalised for any pathogenic protein sequences.
 
 **Code author:** [Gavin Markey](https://github.com/GavinMarkey)  
 **Maintainer:** [Shukla Lab](https://shuklalab.github.io/)

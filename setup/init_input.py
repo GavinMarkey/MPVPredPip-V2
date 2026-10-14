@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 """Create the input folder, explain how to fill it, and check what is in it.
 
     python setup/init_input.py

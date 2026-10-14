@@ -1,4 +1,4 @@
-﻿"""Stage 4 - merge immunogenic class I binders with class II binders."""
+"""Stage 4 - merge immunogenic class I binders with class II binders."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 

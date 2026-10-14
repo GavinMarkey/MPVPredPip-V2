@@ -1,4 +1,4 @@
-﻿# External Tools
+# External Tools
 
 The pipeline orchestration, parsing, and filtering logic are self-contained. The **predictors are not** — they must be installed separately. This file documents what each stage needs and how to install it.
 
@@ -124,6 +124,8 @@ This downloads and configures five tools:
 | Population coverage | 0.8 MB | `-p <populations> -c <class> -f <input>` |
 
 **Important:** The MHC-II configure script is `python configure.py`, not `./configure` (shebang points to `python3`, which doesn't exist in conda environments).
+
+**`setuptools` is bounded below 81 on purpose.** The MHC-I and MHC-II percentile-rank data packages and the population coverage pickle all locate their own data files with `from pkg_resources import resource_filename`. Current setuptools has *removed* `pkg_resources` rather than just deprecating it, so an unbounded `setuptools` breaks stages 4 and 8 with `ModuleNotFoundError: No module named 'pkg_resources'` — including during `python configure.py` above. The bound lives in `workflow/envs/iedb.yaml`; if you build an environment by hand rather than letting Snakemake resolve it, carry the bound over.
 
 ### Allele panels
 

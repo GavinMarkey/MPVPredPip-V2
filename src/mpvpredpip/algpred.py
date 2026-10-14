@@ -1,4 +1,4 @@
-﻿"""Driving AlgPred 2.0 - everything that must happen before it will start.
+"""Driving AlgPred 2.0 - everything that must happen before it will start.
 
 This module is imported inside ``workflow/envs/algpred.yaml``, which pins
 **Python 3.8 and scikit-learn 0.22**. It therefore uses the standard library
@@ -154,9 +154,25 @@ def write_envfile(workdir, tool_dir):
     (``algpred2.py`` lines 292-306), taking exactly four non-comment lines in
     this order. Do not reorder them, and keep colons out of the paths.
 
-    ``blastp`` comes from PATH because it is provided by the conda environment,
-    whose location is decided at environment-build time and is not knowable
-    when the tool is installed.
+    That last constraint is why the tool's own three files are written
+    *relative to the run directory* rather than absolutely. ``split(':')[1]``
+    stops at the next colon, so an absolute Windows path collapses to its
+    drive letter: ``BLAST database:C:\\...\\Database\\data`` is read as ``C``.
+    Nothing reports it. AlgPred passes ``C`` to BLAST and to MERCI, each fails,
+    each leaves the empty output file that ``hybrid`` scores as a legitimate
+    "no hits" - so ``-m 2`` reports the composition model's score under the
+    hybrid model's name. Relative paths carry no drive letter, and they resolve
+    because :func:`run` fills *workdir* with symlinks to ``tool_dir``'s entries
+    and starts AlgPred with ``cwd=workdir`` - which ``algpred2.py`` already
+    relies on for the ten scratch files it names bare.
+
+    ``blastp`` is the one path that cannot be made relative: it comes from PATH
+    because the conda environment supplies it, and where that environment lives
+    is settled when the environment is built, not when the tool is installed.
+    So it stays absolute and is checked instead. On native Windows it carries a
+    drive letter and this raises - which is the intent. The hybrid model is not
+    quietly reduced to one of its three components; the devcontainer is how it
+    is meant to be run.
     """
     blastp = shutil.which("blastp")
     if not blastp:
@@ -166,23 +182,48 @@ def write_envfile(workdir, tool_dir):
             "outside that environment, install BLAST or set "
             "screening.allergenicity.model: 1 in config.yaml."
         )
-    merci = os.path.join(tool_dir, "progs", "MERCI_motif_locator.pl")
-    database = os.path.join(tool_dir, "Database", "data")
-    motifs = os.path.join(tool_dir, "Database", "pos_ige_motifs.txt")
+    merci = os.path.join("progs", "MERCI_motif_locator.pl")
+    database = os.path.join("Database", "data")
+    motifs = os.path.join("Database", "pos_ige_motifs.txt")
 
+    # Checked against the installation, used relative to the run directory.
+    # ``database`` is a BLAST database prefix rather than a file, so there is
+    # nothing at that path to check - setup/check_tools.py checks data.phr.
     for label, path in (("MERCI", merci), ("IgE motif file", motifs)):
-        if not os.path.exists(path):
-            raise AlgPredError("AlgPred's {0} is missing: {1}".format(label, path))
+        installed = os.path.join(tool_dir, path)
+        if not os.path.exists(installed):
+            raise AlgPredError("AlgPred's {0} is missing: {1}".format(label, installed))
+
+    #: Label, path - in the order the parser reads them positionally.
+    payload = (
+        ("BLAST", blastp),
+        ("BLAST database", database),
+        ("MERCI", merci),
+        ("MERCI motif file", motifs),
+    )
+    for label, path in payload:
+        if ":" in path:
+            raise AlgPredError(
+                "AlgPred's envfile cannot carry the path to {0}, because the "
+                "path contains a colon:\n    {1}\n"
+                "The parser takes what lies between the first colon and the "
+                "next (algpred2.py lines 292-306), so AlgPred would receive "
+                "this truncated to {2}, fail to run the tool, read the empty "
+                "output as 'no hits' and score it zero - reporting a hybrid "
+                "result that is really the composition model alone.\n"
+                "A drive letter is the usual cause; AlgPred's hybrid model "
+                "cannot run natively on Windows. Use the Linux devcontainer, "
+                "or set screening.allergenicity.model: 1 in config.yaml."
+                .format(label, path, repr(path.split(":")[0]))
+            )
 
     target = os.path.join(workdir, "envfile")
     if os.path.islink(target) or os.path.exists(target):
         os.remove(target)          # replace the symlink to the shipped one
     with open(target, "w") as handle:
         handle.write("#Generated per run by mpvpredpip - see mpvpredpip.algpred\n")
-        handle.write("BLAST:{0}\n".format(blastp))
-        handle.write("BLAST database:{0}\n".format(database))
-        handle.write("MERCI:{0}\n".format(merci))
-        handle.write("MERCI motif file:{0}\n".format(motifs))
+        for label, path in payload:
+            handle.write("{0}:{1}\n".format(label, path))
 
 
 def stage_script(source, destination):

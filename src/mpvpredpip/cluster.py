@@ -44,7 +44,6 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from . import epitopes as epitope_mod
-from . import schemas, tables
 
 CONSENSUS_MARKERS = {"consensus", "consensus sequence"}
 
@@ -273,6 +272,52 @@ def disagreeing_positions(cluster: Cluster) -> int:
     return count
 
 
+def member_matches_consensus(cluster: Cluster, member: Member) -> bool:
+    """Does this member's sequence appear verbatim in the consensus it sits under?
+
+    The consensus is a per-column **majority vote**, so a residue only two of
+    three members agree on is written into it and the third member is overruled.
+    The result is a sequence that need not exist in any strain, carrying members
+    that do not actually contain it: in the Ebola spike run, cluster 32.1's
+    consensus took S at position 10 where many members have A, and 21 of its 34
+    members did not match the consensus they were filed under.
+
+    That matters because every downstream stage treats the consensus as the
+    candidate and its members as the evidence for it. A member that differs from
+    the consensus is evidence for a *different* peptide.
+
+    An unreadable position counts as a mismatch rather than raising: the member
+    cannot be shown to support the consensus, which is the question being asked.
+    """
+    try:
+        start = int(member.position) - 1
+    except (TypeError, ValueError):
+        return False
+    if start < 0:
+        return False
+    return cluster.consensus[start:start + len(member.sequence)] == member.sequence
+
+
+def prune_to_consensus(cluster: Cluster) -> list[Member]:
+    """Drop members that are not an exact match to their consensus; return them.
+
+    Mutates ``cluster.members``. Everything downstream - the composition counts,
+    the strain set, the disagreement count, pass/fail, and the membership table -
+    is then computed from the members that genuinely support the consensus.
+
+    The consensus itself is deliberately NOT rebuilt from the survivors. Doing so
+    would change it, which could orphan further members, and the loop has no
+    natural fixed point. The consensus stays as the clustering produced it; what
+    changes is that the evidence recorded against it is now evidence for it.
+    """
+    kept: list[Member] = []
+    dropped: list[Member] = []
+    for member in cluster.members:
+        (kept if member_matches_consensus(cluster, member) else dropped).append(member)
+    cluster.members = kept
+    return dropped
+
+
 def cluster_peptides(
     entries: Sequence[tuple[str, str]],
     threshold: float,
@@ -310,8 +355,18 @@ def cluster_peptides(
         # pipeline and its tests already expect.
         cluster_id = f"{number}.1"
         cluster = Cluster(cluster_id=cluster_id, consensus=consensus)
+        # Members are emitted in consensus order - ascending start position -
+        # rather than in whatever order the clustering happened to visit them, so
+        # the table reads as an alignment block: every member sits under the slice
+        # of the consensus it covers. member_index is assigned after the sort, so
+        # it numbers the rows as they appear.
+        #
+        # Python's sort is stable, so peptides starting at the same position keep
+        # the order they were given in - which is the order of the stage 3/4
+        # tables, and the only ordering those rows ever had.
+        ordered = sorted(zip(group, alignments, positions), key=lambda item: item[2])
         for member_index, ((identifier, peptide), alignment, position) in enumerate(
-            zip(group, alignments, positions), start=1
+            ordered, start=1
         ):
             cluster.members.append(
                 Member(
@@ -510,6 +565,18 @@ def evaluate(
                 f"only {n_bepipred + n_epidope} B-cell epitope(s) across both tools, needs {needed}"
             )
 
+    # Strain coverage. A cluster whose members all come from one species yields a
+    # consensus for that species alone; requiring every strain is what makes the
+    # result a genuinely multi-species candidate. Default 0 keeps this off, so a
+    # config written before this option behaves exactly as it did.
+    min_strains = require.get("min_strains", 0)
+    if min_strains:
+        n_strains = len(cluster_strains(cluster))
+        if n_strains < min_strains:
+            reasons.append(
+                f"only {n_strains} strain(s) represented, needs {min_strains}"
+            )
+
     unresolved = sum(1 for member in cluster.members if not member.source_tool)
     if unresolved:
         reasons.append(
@@ -520,43 +587,180 @@ def evaluate(
     return (not reasons), "; ".join(reasons), counts
 
 
-def select(
+#: How far the sweep drops between thresholds, in identity percentage points.
+#: Fixed rather than configurable: "90:50" is meant to read as a range, and a
+#: third number would make the common case harder to write for a step nobody
+#: has asked to vary. The minimum is always included even when the step does
+#: not land on it, so "90:55" ends at 55 rather than overshooting to 50.
+SWEEP_STEP = 10
+
+
+def parse_threshold_sweep(value: object) -> list[int]:
+    """Read ``clustering.threshold`` into the list of thresholds to run.
+
+    ``"90:50"`` sweeps 90, 80, 70, 60, 50 - tightest first. A single number is
+    still accepted and means one threshold, so a config written before the
+    sweep existed behaves exactly as it did.
+
+    Descending order is load-bearing downstream: when the same consensus
+    sequence passes at several thresholds the pooled output keeps the first
+    one, which is then the tightest clustering that produced it.
+    """
+    text = str(value).strip()
+    if ":" not in text:
+        return [_valid_threshold(text)]
+
+    parts = text.split(":")
+    if len(parts) != 2:
+        raise ValueError(
+            f"clustering.threshold {value!r} is not a range. Use 'MAX:MIN', "
+            "for example '90:50', or a single number."
+        )
+    high, low = (_valid_threshold(part) for part in parts)
+    if high < low:
+        raise ValueError(
+            f"clustering.threshold {value!r} runs backwards: it is written "
+            f"MAX:MIN and sweeps from tight to loose, so {high} must not be "
+            f"below {low}."
+        )
+
+    sweep = list(range(high, low, -SWEEP_STEP))
+    if not sweep or sweep[-1] != low:
+        sweep.append(low)
+    return sweep
+
+
+def _valid_threshold(text: str) -> int:
+    """One threshold on the IEDB standalone's 0-100 scale."""
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"clustering.threshold {text!r} is not a number."
+        ) from None
+    # The same guard 05_run_cluster.py applies: the scale is a percentage, and
+    # a value at or below 1 is a fraction left over from the old config, which
+    # would cluster every epitope in the run together.
+    if not 1 < value <= 100:
+        raise ValueError(
+            f"clustering.threshold {text!r} is out of range. It is a PERCENTAGE "
+            "on the IEDB standalone's 0-100 scale, so give 60 rather than 0.6."
+        )
+    return int(value)
+
+
+def _position_key(member: Member) -> tuple[int, int]:
+    """Sort key putting members in ascending consensus position.
+
+    Anything unparseable sorts last rather than raising: ``parse`` accepts a
+    cluster file this pipeline did not necessarily write, and an odd value in
+    one column is not a reason to lose the whole stage.
+    """
+    try:
+        return (0, int(member.position))
+    except (TypeError, ValueError):
+        return (1, 0)
+
+
+@dataclass
+class ThresholdResult:
+    """What one identity threshold produced, before anything is written."""
+
+    threshold: int
+    cluster_rows: list[dict[str, object]] = field(default_factory=list)
+    member_rows: list[dict[str, object]] = field(default_factory=list)
+    #: ``(consensus_id, sequence)`` for the clusters that passed.
+    passing: list[tuple[str, str]] = field(default_factory=list)
+    #: Clusters the tool produced, before the ambiguous ones were discarded.
+    n_found: int = 0
+    #: Discarded for an X in the consensus, so absent from every row above.
+    n_ambiguous: int = 0
+    #: Rejection reason -> how many clusters gave it. One cluster can fail on
+    #: several criteria and is counted under each.
+    reasons: Counter = field(default_factory=Counter)
+
+    @property
+    def n_examined(self) -> int:
+        return self.n_found - self.n_ambiguous
+
+    @property
+    def n_passing(self) -> int:
+        return len(self.passing)
+
+
+def select_at_threshold(
     cluster_path: str,
-    epitope_table: str,
+    epitope_rows: Sequence[dict[str, object]],
     protein_label: str,
-    out_clusters: str,
-    out_members: str,
-    out_fasta: str,
+    threshold: int,
     require: dict[str, int],
     require_both_bcell_tools: bool = True,
     reject_ambiguous: bool = True,
-) -> tuple[int, int]:
-    """Run the full stage-5 selection. Returns ``(n_clusters, n_passing)``."""
-    from . import fasta as fasta_mod
+) -> ThresholdResult:
+    """Apply the selection rule to one threshold's clustering.
+
+    Returns the rows rather than writing them: the caller runs this once per
+    threshold in the sweep and pools the results, and pooling needs the rows in
+    memory anyway.
+
+    *epitope_rows* is passed in already read, because the sweep would otherwise
+    re-read the same table once per threshold.
+
+    A cluster whose consensus contains an X is **discarded outright** when
+    *reject_ambiguous* is set - it contributes no cluster row, no member rows
+    and no summary line, only to :attr:`ThresholdResult.n_ambiguous`. It used
+    to be kept and marked as failing, which put a quarter of all clusters into
+    the output purely to say they were unusable. Discarding them before the
+    members are pruned also skips the most expensive step for the clusters that
+    can never be used.
+    """
+    result = ThresholdResult(threshold=threshold)
 
     clusters = parse(cluster_path)
-    epitope_rows = tables.read_table(epitope_table)
     annotate(clusters, epitope_rows)
+    result.n_found = len(clusters)
 
-    cluster_rows: list[dict[str, object]] = []
-    member_rows: list[dict[str, object]] = []
-    passing: list[tuple[str, str]] = []
+    if reject_ambiguous:
+        usable = [c for c in clusters if AMBIGUOUS not in c.consensus.upper()]
+        result.n_ambiguous = len(clusters) - len(usable)
+        clusters = usable
+
+    # A cluster's consensus is a majority vote and can differ from the members
+    # that produced it; those members are not evidence for it. Pruning here -
+    # rather than at write time - means the composition counts, strain
+    # coverage, pass/fail, the pooled FASTA and the summary are all derived
+    # from members that match their consensus exactly.
+    dropped_counts = {
+        cluster.cluster_id: len(prune_to_consensus(cluster)) for cluster in clusters
+    }
 
     for cluster in clusters:
         passes, reason, counts = evaluate(
             cluster, require, require_both_bcell_tools, reject_ambiguous
         )
-        consensus_id = f"{protein_label}_Consensus_{cluster.cluster_id}"
+        # The threshold is part of the identity, not decoration: cluster ids
+        # restart at 1.1 for every threshold, so without it the sweep would
+        # produce several different peptides all called
+        # "Nucleoprotein_Consensus_1.1" and stage 6 onwards would join them
+        # together.
+        consensus_id = f"{protein_label}_Consensus_{threshold}_{cluster.cluster_id}"
         strains = cluster_strains(cluster)
 
-        cluster_rows.append(
+        if not passes:
+            for part in reason.split("; "):
+                if part:
+                    result.reasons[part] += 1
+
+        result.cluster_rows.append(
             {
                 "protein_label": protein_label,
+                "threshold": threshold,
                 "cluster_id": cluster.cluster_id,
                 "consensus_id": consensus_id,
                 "consensus_sequence": cluster.consensus,
                 "consensus_length": len(cluster.consensus),
                 "n_members": len(cluster.members),
+                "n_members_dropped": dropped_counts.get(cluster.cluster_id, 0),
                 "n_bepipred": counts.get("bepipred", 0),
                 "n_epidope": counts.get("epidope", 0),
                 "n_mhc_i": counts.get("mhc_i", 0),
@@ -569,13 +773,44 @@ def select(
             }
         )
 
-        for member in cluster.members:
-            member_rows.append(
+        # The consensus itself, ahead of its members, so the file reads as an
+        # alignment block: the consensus on top and each member padded to the same
+        # width beneath it. Stages 8 and 9 join these rows on epitope_id to pull
+        # alleles through; "-" matches no epitope, so both skip this row rather
+        # than counting it as a member.
+        result.member_rows.append(
+            {
+                "protein_label": protein_label,
+                "threshold": threshold,
+                "cluster_id": cluster.cluster_id,
+                "consensus_id": consensus_id,
+                "member_index": "Consensus",
+                "epitope_id": "-",
+                "source_tool": "-",
+                "epitope_class": "-",
+                "strains": "|".join(strains),
+                "position": "-",
+                "alignment": cluster.consensus,
+                "sequence": cluster.consensus,
+            }
+        )
+
+        # Ascending consensus position, so each block reads as an alignment under
+        # its consensus. cluster_peptides already orders them this way, but this
+        # must not rely on that: parse() accepts a cluster file this pipeline did
+        # not write - the IEDB standalone's own output - which carries whatever
+        # order that file had. member_index is the row's ordinal in this order,
+        # so the numbering always matches the rows as printed.
+        for member_index, member in enumerate(
+            sorted(cluster.members, key=_position_key), start=1
+        ):
+            result.member_rows.append(
                 {
                     "protein_label": protein_label,
+                    "threshold": threshold,
                     "cluster_id": cluster.cluster_id,
                     "consensus_id": consensus_id,
-                    "member_index": member.member_index,
+                    "member_index": str(member_index),
                     "epitope_id": member.description,
                     "source_tool": member.source_tool,
                     "epitope_class": member.epitope_class,
@@ -587,9 +822,30 @@ def select(
             )
 
         if passes:
-            passing.append((consensus_id, cluster.consensus))
+            result.passing.append((consensus_id, cluster.consensus))
 
-    tables.write_table(out_clusters, schemas.CLUSTERS, cluster_rows)
-    tables.write_table(out_members, schemas.CLUSTER_MEMBERS, member_rows)
-    fasta_mod.write_fasta(out_fasta, passing, width=0)
-    return len(clusters), len(passing)
+    return result
+
+
+def pool_passing(
+    results: Sequence[ThresholdResult],
+) -> tuple[list[tuple[str, str]], int]:
+    """Collapse the sweep's passing peptides to one entry per sequence.
+
+    Returns ``(entries, n_duplicates)``. A peptide that survives at 90% is
+    usually still there at 80% and below, so without this the same sequence
+    would be screened several times over and appear repeatedly among the final
+    candidates.
+
+    *results* is expected tightest-first, and the first occurrence wins, so the
+    survivor is attributed to the tightest clustering that produced it.
+    """
+    seen: dict[str, str] = {}
+    duplicates = 0
+    for result in results:
+        for consensus_id, sequence in result.passing:
+            if sequence in seen:
+                duplicates += 1
+                continue
+            seen[sequence] = consensus_id
+    return [(consensus_id, sequence) for sequence, consensus_id in seen.items()], duplicates

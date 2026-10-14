@@ -1,4 +1,4 @@
-﻿"""Stage 3 adapters - linear B-cell epitope prediction (BepiPred and EpiDope).
+"""Stage 3 adapters - linear B-cell epitope prediction (BepiPred and EpiDope).
 
 Both predictors score **every residue** of a protein. Neither emits epitopes
 directly in a form this pipeline can use, so each adapter normalises its native

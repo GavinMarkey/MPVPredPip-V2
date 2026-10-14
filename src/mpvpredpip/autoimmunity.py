@@ -1,4 +1,4 @@
-﻿"""Stage 6 autoimmunity screen - exact matching against the human proteome.
+"""Stage 6 autoimmunity screen - exact matching against the human proteome.
 
 A candidate peptide that shares a run of residues with a human protein risks
 provoking a self-reactive response, so stage 6 rejects any consensus peptide
@@ -84,21 +84,24 @@ def windows(sequence: str, length: int) -> list[str]:
     return [sequence[index : index + length] for index in range(len(sequence) - length + 1)]
 
 
-class HumanProteome:
-    """The proteome held as one blob, with offsets mapped back to protein IDs.
+class SequenceBlob:
+    """A FASTA file held as one blob, with offsets mapped back to sequence IDs.
 
     Concatenating is what makes this fast enough to do in-process: one
-    :meth:`str.find` per query window scans all 11 MB at C speed, instead of
-    looping over 20,000 separate sequences in Python for every window.
+    :meth:`str.find` per query window scans the whole file at C speed, instead
+    of looping over every record in Python for every window.
+
+    Generic deliberately. :class:`HumanProteome` is this plus the human
+    proteome's own "how to fetch it" message, and
+    :class:`mpvpredpip.allergen_homology.AllergenSet` is the same index over a
+    set of known allergens. Both want identical search behaviour, and a second
+    copy of the offset bookkeeping would be a second place for it to go wrong.
     """
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, empty_message: str) -> None:
         records = fasta_mod.read_fasta(path)
         if not records:
-            raise ValueError(
-                f"No sequences in the human proteome FASTA at {path!r}.\n"
-                "Fetch it with:  bash setup/fetch_human_proteome.sh"
-            )
+            raise ValueError(empty_message)
 
         self.path = path
         self.n_proteins = len(records)
@@ -115,6 +118,16 @@ class HumanProteome:
             cursor += len(sequence) + len(SEPARATOR)
         self._blob = SEPARATOR.join(pieces)
         self.n_residues = sum(len(piece) for piece in pieces)
+        # Kept beside the blob for callers that must score each record
+        # separately. A per-sequence identity percentage cannot be read off the
+        # blob, because a window there may straddle two records and so belong
+        # to neither.
+        self.records = list(zip(self._ids, pieces))
+
+    @property
+    def n_sequences(self) -> int:
+        """Record count, under a name that does not assume proteins."""
+        return self.n_proteins
 
     def find(self, window: str) -> list[Match]:
         """Every exact occurrence of *window*, as :class:`Match` records."""
@@ -131,6 +144,24 @@ class HumanProteome:
             )
             cursor = self._blob.find(window, cursor + 1)
         return found
+
+
+class HumanProteome(SequenceBlob):
+    """The human proteome as a searchable blob.
+
+    Behaviour is unchanged from when this class held the index itself; the
+    bookkeeping moved up to :class:`SequenceBlob` so the allergen homology
+    screen could reuse it rather than copy it.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(
+            path,
+            empty_message=(
+                f"No sequences in the human proteome FASTA at {path!r}.\n"
+                "Fetch it with:  bash setup/fetch_human_proteome.sh"
+            ),
+        )
 
 
 @dataclass

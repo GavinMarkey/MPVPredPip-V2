@@ -1,4 +1,4 @@
-﻿"""Stage 2 - whole-protein antigenicity screen."""
+"""Stage 2 - whole-protein antigenicity screen."""
 
 # No `from __future__ import annotations` - see 01_manifest.py.
 
@@ -49,7 +49,7 @@ with _common.tee_log(_common.log_path(smk)):
     for row in sorted(rows, key=lambda r: -float(r["antigenicity_score"])):
         mark = "yes" if row["antigenic"] else "no"
         lines.append(
-            f"| `{row['sequence_id']}` | {row['length']} | "
+            f"| `{_common.md_cell(row['sequence_id'])}` | {row['length']} | "
             f"{float(row['antigenicity_score']):.4f} | {mark} |"
         )
 

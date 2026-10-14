@@ -1,4 +1,4 @@
-﻿"""Stage 4 - class I immunogenicity screen.
+"""Stage 4 - class I immunogenicity screen.
 
 Every MHC class I binder is scored with the IEDB immunogenicity predictor and
 only those above ``tcell.immunogenicity.min_score`` continue, as the pipeline

@@ -1,8 +1,25 @@
-# Dev container composition.
+# Dev container composition - the entry point for running this pipeline from a
+# CLI, which is how it is used on Linux:
+#
+#     docker compose -f .devcontainer/docker-compose.yml up -d
+#     docker compose -f .devcontainer/docker-compose.yml exec mpvpredpip bash
 #
 # One service. The point of using compose rather than a bare image is the two
 # named volumes: the per-rule conda environments and the conda package cache are
 # slow to build and must survive an image rebuild.
+#
+# VS Code does NOT use this file. devcontainer.json defines the same container
+# through its own `build` key instead, because compose builds via `docker buildx
+# bake`, and bake refuses to read the Dockerfile the Dev Containers CLI generates
+# outside the build context. The long comment at the top of devcontainer.json has
+# the detail. Building from this file is unaffected: the Dockerfile below is
+# inside the context.
+#
+# MIRROR: the two files describe one container. Changes to the build args,
+# volumes, environment, shm size or init here must be made in devcontainer.json
+# as well. The volume names are shared - `name:` below fixes the project prefix
+# so that `mpvpredpip_devcontainer_snakemake-conda` is what both paths mount,
+# whatever the clone directory is called.
 
 name: mpvpredpip_devcontainer
 

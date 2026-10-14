@@ -1,4 +1,4 @@
-﻿"""Stage 4 - MHC class I or class II binding prediction.
+"""Stage 4 - MHC class I or class II binding prediction.
 
 Shared by both binding rules; ``params.mhc_class`` selects which. Reproduces the
 Tepitool selection locally: predict against an explicit allele panel, then keep

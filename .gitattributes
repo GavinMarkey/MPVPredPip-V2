@@ -1,0 +1,44 @@
+# Line-ending policy. The working tree lives on Windows with core.autocrlf=true,
+# but everything that *runs* runs under Linux in the devcontainer. Without this
+# file a checkout rewrites setup/*.sh with CRLF and bash dies on the shebang:
+#
+#     bash: setup/install_iedb.sh: /usr/bin/env bash^M: bad interpreter
+#
+# `eol=lf` pins the working-tree ending to LF regardless of core.autocrlf, so it
+# applies on every clone without anyone reconfiguring git. This is the companion
+# to .editorconfig: that one governs the editor, this one governs git itself.
+
+* text=auto eol=lf
+
+# Load-bearing LF. Listed explicitly rather than left to `text=auto` so the
+# intent survives someone narrowing the wildcard above.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.smk       text eol=lf
+Snakefile   text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+
+# Inputs and intermediates the predictors parse line by line.
+*.fasta     text eol=lf
+*.fa        text eol=lf
+*.faa       text eol=lf
+*.tsv       text eol=lf
+*.csv       text eol=lf
+
+# Never normalise, never diff as text. Nothing binary is tracked today, but the
+# IEDB bundles under tools/ are kept out by .gitignore alone - one `git add -f`
+# of a compiled predictor or a pickled model would be silently corrupted by EOL
+# translation, and the breakage would surface much later as a predictor that
+# starts and returns nothing.
+*.pkl       binary
+*.pickle    binary
+*.pyc       binary
+*.so        binary
+*.gz        binary
+*.tar       binary
+*.zip       binary
+*.xlsx      binary
+*.png       binary
+*.jpg       binary
+*.pdf       binary

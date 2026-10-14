@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vaxpipe"
+name = "mpvpredpip"
 version = "1.0.0"
 description = "Linear peptide-based vaccine candidate prediction pipeline"
 requires-python = ">=3.9"
@@ -20,6 +20,13 @@ dev = ["pytest>=7.4", "ruff>=0.4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+# Named explicitly rather than left to discovery. Without this, find() installs
+# every package under src/, which is how a stale pre-rename copy of this library
+# came to be installed alongside it: `pip install -e .` picked up both, and
+# `import vaxpipe` kept resolving to code frozen before the rename. An editable
+# install makes that worse, because the stale tree stays importable from the
+# source directory rather than being overwritten.
+include = ["mpvpredpip*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -31,13 +38,9 @@ line-length = 100
 target-version = "py39"
 src = ["src", "workflow/scripts"]
 
-# Third-party and historical code that this project does not maintain. The
-# SARS-CoV-2 directory is the previous manual analysis, kept verbatim as the
-# record of what the pipeline replaces - it contains vendored HADDOCK tools and
-# Python 2 scripts that will never be corrected. tools/ holds the licence-gated
-# predictors, which are downloaded rather than committed.
+# Third-party code that this project does not maintain: tools/ holds the
+# licence-gated predictors, which are downloaded rather than committed.
 extend-exclude = [
-    "SARS-COV-2 Peptide Based Vaccine Design",
     "tools",
 ]
 

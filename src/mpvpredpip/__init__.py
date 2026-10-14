@@ -1,4 +1,4 @@
-﻿"""mpvpredpip - linear peptide vaccine-candidate prediction pipeline.
+"""mpvpredpip - linear peptide vaccine-candidate prediction pipeline.
 
 Stage-by-stage helper library backing the Snakemake workflow in ``workflow/``.
 Each module maps onto one numbered stage folder:

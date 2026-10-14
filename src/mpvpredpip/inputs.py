@@ -1,4 +1,4 @@
-﻿"""Stage 0 - the folder users put their sequences in, and the rules for them.
+"""Stage 0 - the folder users put their sequences in, and the rules for them.
 
 Everything the pipeline tells a user about their input files comes from this one
 module: the ``README.txt`` written into the folder, the notice printed when the

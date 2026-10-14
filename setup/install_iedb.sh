@@ -17,13 +17,75 @@
 # mhc_i has `configure`, mhc_ii has `configure.py`, population_coverage has both
 # but its README names `configure`. immunogenicity and cluster have none. The
 # cluster tool is downloaded for reference only - stage 5 no longer uses it, see
-# src/vaxpipe/cluster.py - so it can be skipped with an explicit tool list.
+# src/mpvpredpip/cluster.py - so it can be skipped with an explicit tool list.
 
 set -euo pipefail
 
 BASE="https://downloads.iedb.org/tools"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS="${PROJECT_ROOT}/tools"
+
+# Download a URL to a path, preferring curl and falling back to wget. The other
+# two installers (install_algpred.sh, fetch_human_proteome.sh) already probe for
+# both; this one assumed curl, so a slim image - such as the runtime stage of
+# .devcontainer/Dockerfile - could not install any of the five tools.
+#
+# Returns non-zero rather than exiting, which the optional MD5 fetch relies on.
+#   fetch <url> <dest> [quiet]
+fetch() {
+    local url="$1" dest="$2" quiet="${3:-}"
+    if command -v curl >/dev/null 2>&1; then
+        if [ -n "${quiet}" ]; then
+            curl -fsL "${url}" -o "${dest}"
+        else
+            curl -fL --progress-bar "${url}" -o "${dest}"
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if [ -n "${quiet}" ]; then
+            wget -q "${url}" -O "${dest}"
+        else
+            wget -q --show-progress "${url}" -O "${dest}"
+        fi
+    else
+        echo "  ERROR: neither curl nor wget is available." >&2
+        return 1
+    fi
+}
+
+# netMHCpan 4.1's compiled binary resolves its model files as $NETMHCpan/data,
+# and the wrapper script sets
+#     setenv NETMHCpan $NMHOME/`uname -s`_`uname -m`
+# so it looks for them *inside* the platform directory. The vendor's own install
+# instructions (netMHCpan-4.1.readme, step 2) untar data/ at the bundle root,
+# and that is where the IEDB archive ships it. The two never meet: the binary
+# starts, cannot open data/version, and prints
+#     Unable to open(r) file .../Linux_x86_64/data/version
+#     'NoneType' object is not iterable
+# on *stdout*, then exits 0. Stage 4 captures stdout as the results table, so
+# without this link class I quietly produces no binders at all. That is what
+# _check_binding_output in src/mpvpredpip/adapters/iedb.py exists to catch, and
+# what it caught; this is the underlying cause.
+#
+# A relative symlink per bundle, not a copy - the model sets are hundreds of MB.
+# Bundles that already ship a platform data/ (pickpocket) are left alone.
+link_platform_data() {
+    local dest="$1"
+    local platform
+    platform="$(uname -s)_$(uname -m)"
+    local bundle linked=0
+
+    for bundle in "${dest}"/method/*/*/; do
+        [ -d "${bundle}data" ] || continue
+        [ -d "${bundle}${platform}" ] || continue
+        [ -e "${bundle}${platform}/data" ] && continue
+        ln -sfn ../data "${bundle}${platform}/data"
+        linked=$((linked + 1))
+    done
+
+    if [ "${linked}" -gt 0 ]; then
+        echo "  Linked ${platform}/data for ${linked} method bundle(s)."
+    fi
+}
 
 # target_dir | remote subdirectory | archive | configure command ("" = none)
 # The target directory names are the ones config.yaml points at under `tools:`.
@@ -68,13 +130,13 @@ install_one() {
     trap 'rm -rf "${staging}"' RETURN
 
     echo "  Downloading."
-    curl -fL --progress-bar -o "${staging}/${archive}" "${url}"
+    fetch "${url}" "${staging}/${archive}"
 
     # The MD5SUM file covers every archive in that directory, so pick our line
     # out of it. These are large binary downloads over a long transfer; a silent
     # truncation would surface much later as an unreadable model file.
     echo "  Verifying checksum."
-    if curl -fsL "${BASE}/${remote}/LATEST/MD5SUM" -o "${staging}/MD5SUM" 2>/dev/null; then
+    if fetch "${BASE}/${remote}/LATEST/MD5SUM" "${staging}/MD5SUM" quiet 2>/dev/null; then
         local expected actual
         expected="$(grep -F "${archive}" "${staging}/MD5SUM" | awk '{print $1}' | head -1)"
         actual="$(md5sum "${staging}/${archive}" | awk '{print $1}')"
@@ -141,6 +203,8 @@ install_one() {
         done
     fi
 
+    link_platform_data "${dest}"
+
     echo "  Done."
 }
 
@@ -169,7 +233,7 @@ The things most likely to be wrong, in order:
      with alleles and lengths as PARALLEL comma-separated lists of equal
      length. That matches this version's README, but has not been run.
   2. the output column names, resolved by name in
-     src/vaxpipe/adapters/iedb.py. This is what cost the most time with IAPred:
+     src/mpvpredpip/adapters/iedb.py. This is what cost the most time with IAPred:
      its README documented a column the tool no longer emitted.
   3. the class II tool uses configure.py where class I uses configure - already
      handled above, but a sign the two are not as symmetrical as they look.

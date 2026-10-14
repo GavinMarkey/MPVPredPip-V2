@@ -1,4 +1,4 @@
-﻿"""Stage 3 - run one B-cell predictor and convert per-residue scores to epitopes.
+"""Stage 3 - run one B-cell predictor and convert per-residue scores to epitopes.
 
 Shared by the BepiPred and EpiDope rules: which predictor runs is decided by
 ``params.source_tool``, and the interval-building rules are identical for both so
@@ -103,7 +103,7 @@ with _common.tee_log(args.log):
     # first, then on a unique prefix, so a truncated identifier is still resolved
     # rather than silently dropping a whole protein's predictions.
     def resolve(sequence_id):
-        # -> str | None. Unannotated: this runs under Python 3.8 (epidope.yaml).
+        # -> str | None. Unannotated: this runs under Python 3.8 (epidope.yml).
         if sequence_id in records:
             return sequence_id
         matches = [key for key in records if key.startswith(sequence_id) or sequence_id.startswith(key)]

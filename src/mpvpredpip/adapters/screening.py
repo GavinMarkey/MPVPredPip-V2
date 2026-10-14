@@ -1,4 +1,4 @@
-﻿"""Stage 2 and 6 adapters - antigenicity, allergenicity and autoimmunity.
+"""Stage 2 and 6 adapters - antigenicity, allergenicity and autoimmunity.
 
 ------------------------------------------------------------------------------
 Antigenicity predictor backends

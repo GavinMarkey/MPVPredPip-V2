@@ -73,7 +73,7 @@ columns by name. If a future version breaks it, you have two options, neither
 of which touches anything downstream:
 
   1. Correct _IAPRED_ENTRYPOINTS / _IAPRED_ARG_STYLES / _IAPRED_*_COLUMNS at the
-     top of src/vaxpipe/adapters/screening.py
+     top of src/mpvpredpip/adapters/screening.py
 
   2. Bypass the adapter entirely - in config.yaml set
 

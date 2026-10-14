@@ -1,4 +1,4 @@
-﻿# BepiPred-3.0.
+# BepiPred-3.0.
 #
 # BepiPred-3.0 runs an ESM-2 protein language model, so this environment carries
 # PyTorch and fair-esm. It is deliberately separate from the EpiDope environment:

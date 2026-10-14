@@ -1,4 +1,4 @@
-﻿"""External predictor adapters.
+"""External predictor adapters.
 
 Each module wraps third-party tools that this pipeline does not control:
 

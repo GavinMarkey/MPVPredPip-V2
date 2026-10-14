@@ -1,4 +1,4 @@
-﻿"""Stage 1 - build the sequence manifest and normalised FASTA files.
+"""Stage 1 - build the sequence manifest and normalised FASTA files.
 
 No ``from __future__ import annotations`` here, or in any script run through
 Snakemake's ``script:`` directive: Snakemake prepends its own preamble to inject
