@@ -301,10 +301,9 @@ resources/
 ## Known Limitations & Caveats
 
 - **First-run downloads:** BepiPred downloads ESM-2 models (~2 GB) on the first B-cell prediction run. Subsequent runs use the cache.
-- **Tool adapters unverified:** Predictor invocations (src/mpvpredpip/adapters/`) are based on tool source code and documentation, not exhaustive testing. See `tools/README.md` for which tools have been confirmed on real data.
+- **Tool adapters unverified:** Predictor invocations (`src/mpvpredpip/adapters/`) are based on tool source code and documentation, not exhaustive testing.
 - **Antigenicity threshold:** The default (`-0.3`) is IApred's Moderate/Low boundary, suitable for peptides. Verify it matches your biological hypothesis before reporting results.
-- **AlgPred model:** The hybrid model uses BLAST and sequence motifs, which have limited power at 20–30 aa length. The pipeline documents this in stage 6's output.
-- **No wet-lab validation:** This is a **computational screen**, not a guarantee of immunogenicity or safety. Validation requires lab testing.
+- **AlgPred model:** The hybrid model uses BLAST and sequence motifs, which have limited power at 20–30 aa length. The pipeline documents this in stage 6's output and treats an ALLERGEN call as advisory rather than a hard filter by default. To mitigate it, stage 6 also runs an independent allergen homology screen (`screening.allergen_homology`), matching each candidate and its constituent epitopes against a set of known allergens for both shared exact runs of residues and overall sequence identity.
 - **Stages 10+:** Docking, molecular dynamics, and manuscript generation are outside this workflow. Stage 9's FASTA is the handoff point.
 
 ---
