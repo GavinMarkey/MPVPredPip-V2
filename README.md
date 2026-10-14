@@ -34,7 +34,7 @@ Originally developed for **HBoV** virus strains, now generalised for any pathoge
 
 2. **Clone and open:**
    ```bash
-   git clone https://github.com/YourName/MPVPredPip-V2.git
+   git clone https://github.com/GavinMarkey/MPVPredPip-V2
    cd MPVPredPip-V2
    code .
    ```
@@ -76,7 +76,7 @@ For users comfortable with Docker Compose commands:
 
 2. **Clone:**
    ```bash
-   git clone https://github.com/YourName/MPVPredPip-V2.git
+   git clone https://github.com/GavinMarkey/MPVPredPip-V2.git
    cd MPVPredPip-V2
    ```
 
